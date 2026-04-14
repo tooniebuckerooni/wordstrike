@@ -1,0 +1,1147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WordStrike</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #1a1a2e; color: #eee; min-height: 100vh; }
+  h1 { text-align: center; font-size: 2rem; padding: 1.5rem 0 0.25rem; letter-spacing: 2px; color: #a78bfa; }
+  .subtitle { text-align: center; color: #888; font-size: 0.85rem; margin-bottom: 1.5rem; }
+  .screen { display: none; max-width: 700px; margin: 0 auto; padding: 1rem; }
+  .screen.active { display: block; }
+  .card { background: #16213e; border: 1px solid #2a2a5a; border-radius: 12px; padding: 1.25rem; margin-bottom: 1rem; }
+  label { display: block; font-size: 0.85rem; color: #aaa; margin-bottom: 4px; margin-top: 12px; }
+  input[type=text], input[type=number] {
+    width: 100%; padding: 0.6rem 0.75rem; border-radius: 8px;
+    border: 1px solid #3a3a6a; background: #0f0f23; color: #eee; font-size: 1rem;
+  }
+  input:focus { outline: 2px solid #7c3aed; border-color: transparent; }
+  button {
+    cursor: pointer; border: none; border-radius: 8px; font-size: 1rem;
+    padding: 0.6rem 1.2rem; transition: opacity 0.15s, transform 0.1s;
+  }
+  button:hover { opacity: 0.85; }
+  button:active { transform: scale(0.97); }
+  button:disabled { opacity: 0.4; cursor: default; transform: none; }
+  .btn-primary { background: #7c3aed; color: #fff; }
+  .btn-secondary { background: #2a2a5a; color: #ccc; }
+  .btn-danger { background: #7f1d1d; color: #fca5a5; }
+  .btn-sm { font-size: 0.8rem; padding: 0.35rem 0.75rem; }
+  .btn-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1rem; }
+  .player-entry { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; }
+  .player-entry input { flex: 1; }
+  .board { margin-bottom: 1.25rem; }
+  .board-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; flex-wrap: wrap; }
+  .board-name { font-weight: 600; font-size: 1rem; }
+  .board-status { font-size: 0.75rem; padding: 2px 8px; border-radius: 20px; }
+  .status-alive { background: #14532d; color: #86efac; }
+  .status-eliminated { background: #450a0a; color: #fca5a5; }
+  .board-score { margin-left: auto; font-size: 0.85rem; color: #a78bfa; }
+  .tiles { display: flex; flex-wrap: wrap; gap: 5px; }
+  .tile {
+    width: 36px; height: 36px; border-radius: 6px; border: 1px solid #3a3a6a;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 1rem; text-transform: uppercase;
+    background: #0f0f23; color: #eee; transition: background 0.2s;
+  }
+  .tile.revealed { background: #1e3a5f; color: #93c5fd; border-color: #3b82f6; }
+  .tile.blank-revealed { background: #1a1a2e; color: #555; border-color: #2a2a5a; }
+  .tile.hidden { background: #1e1e40; color: transparent; }
+  .turn-banner {
+    text-align: center; padding: 0.75rem; border-radius: 10px;
+    background: #2d1b69; border: 1px solid #5b21b6; margin-bottom: 1rem; font-size: 1rem;
+  }
+  .turn-banner span { color: #c4b5fd; font-weight: 600; }
+  .action-panel { background: #16213e; border: 1px solid #2a2a5a; border-radius: 12px; padding: 1.25rem; margin-bottom: 1rem; }
+  .action-panel h3 { font-size: 0.9rem; color: #888; margin-bottom: 0.75rem; }
+  .action-panel.locked { opacity: 0.4; pointer-events: none; }
+  .target-buttons { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
+  .target-btn {
+    padding: 0.4rem 0.9rem; border-radius: 20px; font-size: 0.85rem; cursor: pointer;
+    border: 1.5px solid #3a3a6a; background: transparent; color: #ccc; transition: all 0.15s;
+  }
+  .target-btn.selected { border-color: #7c3aed; background: #2d1b69; color: #c4b5fd; }
+  .letter-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 1rem; }
+  .letter-btn {
+    width: 40px; height: 40px; border-radius: 8px; font-size: 0.95rem; font-weight: 600;
+    cursor: pointer; border: 1.5px solid #3a3a6a; background: transparent; color: #ddd; transition: all 0.15s;
+  }
+  .letter-btn.selected { border-color: #7c3aed; background: #2d1b69; color: #c4b5fd; }
+  .letter-btn.used-correct { background: #14532d; border-color: #22c55e; color: #86efac; }
+  .letter-btn.used-wrong { background: #27272a; border-color: #444; color: #555; cursor: default; }
+  .blank-btn {
+    padding: 0 12px; border-radius: 8px; height: 40px; font-size: 0.8rem;
+    cursor: pointer; border: 1.5px solid #3a3a6a; background: transparent; color: #ddd; transition: all 0.15s;
+  }
+  .blank-btn.selected { border-color: #7c3aed; background: #2d1b69; color: #c4b5fd; }
+  .feedback { text-align: center; font-size: 0.95rem; min-height: 1.5rem; margin: 0.5rem 0; font-weight: 500; }
+  .feedback.correct { color: #86efac; }
+  .feedback.wrong { color: #fca5a5; }
+  .feedback.info { color: #93c5fd; }
+  .scoreboard { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  .scoreboard th { color: #888; font-weight: 500; padding: 6px 8px; border-bottom: 1px solid #2a2a5a; text-align: left; }
+  .scoreboard td { padding: 6px 8px; border-bottom: 1px solid #1a1a3a; }
+  .scoreboard tr.winner td { color: #fbbf24; font-weight: 600; }
+  .mode-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1rem 0; }
+  .mode-card {
+    background: #0f0f23; border: 2px solid #2a2a5a; border-radius: 12px;
+    padding: 1.25rem; cursor: pointer; transition: all 0.15s; text-align: center;
+  }
+  .mode-card:hover { border-color: #5b21b6; }
+  .mode-card.selected { border-color: #7c3aed; background: #1e1248; }
+  .mode-card h3 { font-size: 1rem; margin-bottom: 0.4rem; }
+  .mode-card p { font-size: 0.8rem; color: #888; }
+  .private-entry { background: #0a0a1a; border: 1px dashed #3a3a6a; border-radius: 10px; padding: 1.25rem; text-align: center; }
+  .private-entry h3 { margin-bottom: 0.5rem; color: #c4b5fd; }
+  .private-entry p { font-size: 0.8rem; color: #888; margin-bottom: 1rem; }
+  .word-input-row input { width: 100%; letter-spacing: 2px; font-size: 1.1rem; }
+  .char-counter { font-size: 0.8rem; color: #888; text-align: right; margin-top: 4px; }
+  .char-counter.over { color: #fca5a5; }
+  .play-type-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1rem 0; }
+  .play-type-card {
+    background: #0f0f23; border: 2px solid #2a2a5a; border-radius: 12px;
+    padding: 1.5rem 1rem; cursor: pointer; transition: all 0.15s; text-align: center;
+  }
+  .play-type-card:hover { border-color: #5b21b6; background: #1e1248; }
+  .play-type-card .icon { font-size: 2rem; margin-bottom: 0.5rem; }
+  .play-type-card h3 { font-size: 1rem; margin-bottom: 0.3rem; }
+  .play-type-card p { font-size: 0.78rem; color: #888; }
+  .game-code-box {
+    text-align: center; background: #0f0f23; border: 1px solid #3a3a6a;
+    border-radius: 10px; padding: 1.25rem; margin: 1rem 0;
+  }
+  .game-code-box .code {
+    font-size: 3rem; font-weight: 700; letter-spacing: 10px; color: #a78bfa;
+    font-family: monospace; margin: 0.5rem 0;
+  }
+  .game-code-box p { font-size: 0.8rem; color: #888; }
+  .lobby-player {
+    display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0.75rem;
+    background: #0f0f23; border-radius: 8px; margin-bottom: 0.5rem; border: 1px solid #2a2a5a;
+  }
+  .lobby-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .spinner {
+    width: 32px; height: 32px; border: 3px solid #2a2a5a; border-top-color: #7c3aed;
+    border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 1rem;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .waiting-screen { text-align: center; padding: 2rem 1rem; }
+  .waiting-screen p { color: #888; margin-bottom: 1rem; }
+  .ready-row { font-size: 0.9rem; margin: 4px 0; }
+  .ready-row.done { color: #86efac; }
+  .ready-row.pending { color: #888; }
+  .conn-status { font-size: 0.78rem; padding: 3px 10px; border-radius: 20px; display: inline-block; margin-bottom: 0.5rem; }
+  .conn-ok { background: #14532d; color: #86efac; }
+  .conn-wait { background: #1a1000; color: #fcd34d; }
+  .conn-err { background: #450a0a; color: #fca5a5; }
+  @media (max-width: 500px) {
+    .mode-cards, .play-type-cards { grid-template-columns: 1fr; }
+    .tile { width: 30px; height: 30px; font-size: 0.85rem; }
+    .letter-btn { width: 34px; height: 34px; font-size: 0.85rem; }
+    .game-code-box .code { font-size: 2rem; letter-spacing: 6px; }
+  }
+
+  .chat-box {
+    background: #16213e; border: 1px solid #2a2a5a; border-radius: 12px;
+    margin-top: 1rem; overflow: hidden;
+  }
+  .chat-header {
+    font-size: 0.78rem; color: #888; padding: 0.5rem 0.9rem;
+    border-bottom: 1px solid #2a2a5a; letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .chat-messages {
+    height: 160px; overflow-y: auto; padding: 0.6rem 0.9rem;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .chat-messages::-webkit-scrollbar { width: 4px; }
+  .chat-messages::-webkit-scrollbar-thumb { background: #3a3a6a; border-radius: 4px; }
+  .chat-msg { font-size: 0.85rem; line-height: 1.4; word-break: break-word; }
+  .chat-msg .chat-name { font-weight: 500; margin-right: 6px; }
+  .chat-msg.system { color: #888; font-style: italic; }
+  .chat-input-row {
+    display: flex; gap: 0; border-top: 1px solid #2a2a5a;
+  }
+  .chat-input-row input {
+    flex: 1; background: transparent; border: none; border-radius: 0;
+    padding: 0.55rem 0.9rem; font-size: 0.9rem; color: #eee; outline: none;
+  }
+  .chat-input-row input::placeholder { color: #555; }
+  .chat-send-btn {
+    background: transparent; border: none; border-left: 1px solid #2a2a5a;
+    color: #a78bfa; padding: 0 1rem; font-size: 0.85rem; cursor: pointer;
+    transition: background 0.1s;
+  }
+  .chat-send-btn:hover { background: #2a2a5a; }
+</style>
+</head>
+<body>
+
+<h1>WordStrike</h1>
+<div class="subtitle">guess letters · crack words · be the last standing</div>
+
+<!-- HOME -->
+<div id="screen-home" class="screen active">
+  <div class="card">
+    <h2 style="font-size:1.1rem;color:#c4b5fd;margin-bottom:0.5rem;">How do you want to play?</h2>
+    <div class="play-type-cards">
+      <div class="play-type-card" onclick="chooseLocal()">
+        <div class="icon">🖥️</div>
+        <h3>Same Device</h3>
+        <p>Everyone plays on one screen. Pass and play.</p>
+      </div>
+      <div class="play-type-card" onclick="showScreen('screen-online-setup')">
+        <div class="icon">🌐</div>
+        <h3>Online</h3>
+        <p>Players join from their own devices using a 4-letter code. No sign-up needed.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- LOCAL SETUP -->
+<div id="screen-setup" class="screen">
+  <div class="card">
+    <h2 style="font-size:1.1rem;color:#c4b5fd;margin-bottom:1rem;">Game Settings</h2>
+    <label>Game mode</label>
+    <div class="mode-cards">
+      <div class="mode-card selected" id="mode-last" onclick="selectMode('last')">
+        <h3>Last Standing</h3>
+        <p>Get your word fully guessed and you're out. Last player alive wins.</p>
+      </div>
+      <div class="mode-card" id="mode-points" onclick="selectMode('points')">
+        <h3>Points</h3>
+        <p>Earn points for correct letters and cracked words. Highest score wins.</p>
+      </div>
+    </div>
+    <label>Characters per board (including spaces)</label>
+    <input type="number" id="char-count" value="10" min="4" max="30">
+    <div id="points-options" style="display:none;">
+      <label>Rounds (points mode only)</label>
+      <input type="number" id="rounds" value="5" min="1" max="20">
+    </div>
+    <label>Players</label>
+    <div id="player-list"></div>
+    <div class="btn-row">
+      <button class="btn-secondary btn-sm" onclick="addPlayer()">+ Add player</button>
+    </div>
+  </div>
+  <div class="btn-row">
+    <button class="btn-secondary" onclick="showScreen('screen-home')">← Back</button>
+    <button class="btn-primary" onclick="startLocalGame()" style="flex:1;">Start game →</button>
+  </div>
+</div>
+
+<!-- ONLINE SETUP -->
+<div id="screen-online-setup" class="screen">
+  <div class="card">
+    <h2 style="font-size:1.1rem;color:#c4b5fd;margin-bottom:1rem;">Set up online game</h2>
+    <label>Your name</label>
+    <input type="text" id="host-name" placeholder="your player name">
+    <label>Game mode</label>
+    <div class="mode-cards">
+      <div class="mode-card selected" id="omode-last" onclick="selectOnlineMode('last')">
+        <h3>Last Standing</h3><p>Last player alive wins.</p>
+      </div>
+      <div class="mode-card" id="omode-points" onclick="selectOnlineMode('points')">
+        <h3>Points</h3><p>Highest score wins.</p>
+      </div>
+    </div>
+    <label>Characters per board (including spaces)</label>
+    <input type="number" id="o-char-count" value="10" min="4" max="30">
+    <div id="o-points-options" style="display:none;">
+      <label>Rounds</label>
+      <input type="number" id="o-rounds" value="5" min="1" max="20">
+    </div>
+  </div>
+  <div id="online-setup-error" style="color:#fca5a5;font-size:0.85rem;text-align:center;margin-bottom:0.5rem;"></div>
+  <div class="btn-row">
+    <button class="btn-secondary" onclick="showScreen('screen-home')">← Back</button>
+    <button class="btn-primary" id="create-btn" onclick="createGame()" style="flex:1;">Create game →</button>
+  </div>
+  <div style="text-align:center;margin-top:1rem;font-size:0.85rem;color:#888;">
+    Have a code already?
+    <button class="btn-secondary btn-sm" style="margin-left:0.5rem;" onclick="showScreen('screen-join')">Join a game</button>
+  </div>
+</div>
+
+<!-- JOIN -->
+<div id="screen-join" class="screen">
+  <div class="card">
+    <h2 style="font-size:1.1rem;color:#c4b5fd;margin-bottom:1rem;">Join a game</h2>
+    <label>Your name</label>
+    <input type="text" id="join-name" placeholder="your player name">
+    <label>4-letter game code</label>
+    <input type="text" id="join-code" placeholder="ABCD" maxlength="4" autocomplete="off"
+      oninput="this.value=this.value.replace(/[^a-zA-Z]/g,'').toUpperCase()"
+      style="letter-spacing:8px;font-size:1.8rem;font-family:monospace;text-align:center;">
+  </div>
+  <div id="join-error" style="color:#fca5a5;font-size:0.85rem;text-align:center;margin-bottom:0.5rem;"></div>
+  <div class="btn-row">
+    <button class="btn-secondary" onclick="showScreen('screen-home')">← Back</button>
+    <button class="btn-primary" id="join-btn" onclick="joinGame()" style="flex:1;">Join →</button>
+  </div>
+</div>
+
+<!-- LOBBY -->
+<div id="screen-lobby" class="screen">
+  <div class="card">
+    <h2 style="font-size:1.1rem;color:#c4b5fd;margin-bottom:0.75rem;">Lobby</h2>
+    <div id="lobby-conn-status"></div>
+    <div class="game-code-box">
+      <p>Share this code with friends</p>
+      <div class="code" id="lobby-code">----</div>
+      <p>They open the game and click Online → Join a game</p>
+    </div>
+    <div id="lobby-player-list"></div>
+    <div id="lobby-status" style="font-size:0.85rem;color:#888;text-align:center;margin-top:0.5rem;"></div>
+  </div>
+  <div id="lobby-start-row" class="btn-row" style="display:none;">
+    <button class="btn-primary" onclick="hostStartGame()" style="flex:1;">Everyone's here — Start! →</button>
+  </div>
+  <div id="lobby-waiting-msg" style="text-align:center;font-size:0.85rem;color:#888;margin-top:0.5rem;display:none;">
+    Waiting for the host to start...
+  </div>
+
+  <div class="chat-box" id="lobby-chat" style="display:none;">
+    <div class="chat-header">lobby chat</div>
+    <div class="chat-messages" id="lobby-chat-messages"></div>
+    <div class="chat-input-row">
+      <input type="text" id="lobby-chat-input" placeholder="say something..." maxlength="200"
+        onkeydown="if(event.key==='Enter') sendChat('lobby')">
+      <button class="chat-send-btn" onclick="sendChat('lobby')">Send</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- WORD ENTRY -->
+<div id="screen-entry" class="screen">
+  <div class="private-entry card" id="entry-card">
+    <h3 id="entry-heading">Player 1 — enter your word</h3>
+    <p id="entry-subtext">Enter your secret word or phrase. Pass the device when done.</p>
+    <div class="word-input-row" style="margin-top:0.75rem;">
+      <input type="text" id="word-input" placeholder="your word or phrase..." autocomplete="off"
+        autocorrect="off" spellcheck="true" lang="en" oninput="onWordInput()">
+    </div>
+    <div class="char-counter" id="char-counter">0 / 10</div>
+    <div class="btn-row" style="justify-content:center;margin-top:1rem;">
+      <button class="btn-primary" id="lock-btn" onclick="submitWord()">Lock it in</button>
+    </div>
+    <div id="entry-error" style="color:#fca5a5;font-size:0.85rem;margin-top:0.5rem;text-align:center;"></div>
+  </div>
+  <div id="entry-waiting" class="waiting-screen" style="display:none;">
+    <div class="spinner"></div>
+    <p>Word submitted! Waiting for everyone else...</p>
+    <div id="entry-ready-list"></div>
+  </div>
+</div>
+
+<!-- PLAY -->
+<div id="screen-play" class="screen">
+  <div class="turn-banner">
+    <span id="turn-name">Player 1</span>'s turn
+    <span id="round-label" style="color:#888;font-size:0.8rem;"></span>
+  </div>
+  <div id="not-your-turn" style="display:none;text-align:center;font-size:0.85rem;color:#888;margin-bottom:0.75rem;"></div>
+  <div id="boards"></div>
+  <div class="action-panel" id="action-panel">
+    <h3>Choose your target</h3>
+    <div class="target-buttons" id="targets"></div>
+    <h3>Choose a letter (or blank/space)</h3>
+    <div class="letter-grid" id="letters"></div>
+    <div class="feedback" id="feedback"></div>
+    <div class="btn-row" style="justify-content:center;">
+      <button class="btn-primary" onclick="makeGuess()">Guess</button>
+    </div>
+  </div>
+  <div class="chat-box" id="play-chat" style="display:none;">
+    <div class="chat-header">game chat</div>
+    <div class="chat-messages" id="play-chat-messages"></div>
+    <div class="chat-input-row">
+      <input type="text" id="play-chat-input" placeholder="say something..." maxlength="200"
+        onkeydown="if(event.key==='Enter') sendChat('play')">
+      <button class="chat-send-btn" onclick="sendChat('play')">Send</button>
+    </div>
+  </div>
+</div>
+
+<!-- RESULTS -->
+<div id="screen-results" class="screen">
+  <div class="card" style="text-align:center;">
+    <div style="font-size:2.5rem;margin-bottom:0.5rem;">🏆</div>
+    <h2 id="winner-text" style="color:#fbbf24;margin-bottom:0.5rem;"></h2>
+    <p id="result-sub" style="color:#888;font-size:0.85rem;margin-bottom:1.5rem;"></p>
+    <table class="scoreboard" id="scoreboard"></table>
+  </div>
+  <div class="btn-row">
+    <button class="btn-primary" onclick="playAgain()" style="flex:1;">Play again</button>
+  </div>
+</div>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+// ── State ───────────────────────────────────────────────────────────────────
+let gameMode = 'last', charCount = 10, rounds = 5;
+let players = [], currentEntryIndex = 0, currentTurn = 0, currentRound = 1;
+let selectedTarget = null, selectedLetter = null;
+
+// Online state
+let isOnline = false, isHost = false;
+let myName = '', myIndex = -1, gameCode = '';
+let peer = null;           // our PeerJS instance
+let hostConn = null;       // joiner's connection to host
+let guestConns = {};       // host's map of name -> DataConnection
+let wordsIn = 0;
+
+const COLORS = ['#7c3aed','#0ea5e9','#f59e0b','#10b981','#ef4444','#ec4899'];
+function mkPlayer(name, i) {
+  return { name, word:'', tiles:[], score:0, eliminated:false,
+    color: COLORS[i % COLORS.length], wrongGuesses: new Set() };
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+function setErr(id, msg) { document.getElementById(id).textContent = msg; }
+function generateCode() {
+  // avoid ambiguous chars O/0 I/1
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  return Array.from({length:4}, () => chars[Math.floor(Math.random()*chars.length)]).join('');
+}
+
+// ── Local mode ──────────────────────────────────────────────────────────────
+function chooseLocal() { isOnline = false; showScreen('screen-setup'); }
+
+function selectMode(m) {
+  gameMode = m;
+  document.getElementById('mode-last').classList.toggle('selected', m==='last');
+  document.getElementById('mode-points').classList.toggle('selected', m==='points');
+  document.getElementById('points-options').style.display = m==='points'?'block':'none';
+}
+
+function addPlayer(name='') {
+  const list = document.getElementById('player-list');
+  const idx = list.children.length;
+  const div = document.createElement('div');
+  div.className = 'player-entry';
+  div.innerHTML = `<input type="text" placeholder="Player ${idx+1}" value="${name}">
+    <button class="btn-danger btn-sm" onclick="this.parentElement.remove()">✕</button>`;
+  list.appendChild(div);
+}
+
+function startLocalGame() {
+  charCount = parseInt(document.getElementById('char-count').value)||10;
+  rounds    = parseInt(document.getElementById('rounds').value)||5;
+  const names = Array.from(document.querySelectorAll('#player-list .player-entry input'))
+    .map((el,i) => el.value.trim()||'Player '+(i+1));
+  if (names.length < 2) { alert('Add at least 2 players!'); return; }
+  players = names.map(mkPlayer);
+  currentEntryIndex = 0;
+  showLocalEntry();
+}
+
+function showLocalEntry() {
+  const p = players[currentEntryIndex];
+  document.getElementById('entry-heading').textContent = p.name + ' — enter your word';
+  document.getElementById('entry-subtext').textContent = 'Enter your secret word or phrase. Pass the device when done.';
+  resetEntryUI();
+  showScreen('screen-entry');
+  setTimeout(() => document.getElementById('word-input').focus(), 80);
+}
+
+// ── Online mode — host ───────────────────────────────────────────────────────
+function selectOnlineMode(m) {
+  gameMode = m;
+  document.getElementById('omode-last').classList.toggle('selected', m==='last');
+  document.getElementById('omode-points').classList.toggle('selected', m==='points');
+  document.getElementById('o-points-options').style.display = m==='points'?'block':'none';
+}
+
+function createGame() {
+  const name = document.getElementById('host-name').value.trim();
+  setErr('online-setup-error','');
+  if (!name) { setErr('online-setup-error','Enter your name.'); return; }
+
+  charCount = parseInt(document.getElementById('o-char-count').value)||10;
+  rounds    = parseInt(document.getElementById('o-rounds').value)||5;
+  isOnline = true; isHost = true; myName = name;
+  gameCode = generateCode();
+
+  const btn = document.getElementById('create-btn');
+  btn.textContent = 'Connecting...'; btn.disabled = true;
+
+  // PeerJS peer ID = "ws-XXXX" where XXXX is the game code
+  peer = new Peer('ws-' + gameCode, { debug: 0 });
+
+  peer.on('open', () => {
+    players = [mkPlayer(name, 0)];
+    myIndex = 0; wordsIn = 0; guestConns = {};
+    btn.textContent = 'Create game →'; btn.disabled = false;
+    renderLobby();
+    showScreen('screen-lobby');
+    showChat();
+  });
+
+  peer.on('error', e => {
+    btn.textContent = 'Create game →'; btn.disabled = false;
+    // Code already taken? try a new one
+    if (e.type === 'unavailable-id') {
+      gameCode = generateCode();
+      peer.destroy();
+      createGame();
+    } else {
+      setErr('online-setup-error', 'Connection error: ' + e.message);
+    }
+  });
+
+  // Host listens for incoming connections from joiners
+  peer.on('connection', conn => {
+    conn.on('open', () => {
+      // conn.metadata.name set by joiner
+      const jName = conn.metadata && conn.metadata.name ? conn.metadata.name : 'Guest';
+      guestConns[jName] = conn;
+      if (!players.find(p => p.name === jName)) {
+        players.push(mkPlayer(jName, players.length));
+      }
+      broadcastToAll({ type: 'roster', players: players.map(p => p.name) });
+      broadcastToAll({ type: 'chat', name: '__system__', text: jName + ' joined the lobby' });
+      appendChat('', jName + ' joined the lobby', true);
+      renderLobby();
+      conn.on('data', data => onHostReceive(jName, data));
+      conn.on('close', () => {
+        delete guestConns[jName];
+        // Optionally handle disconnect
+      });
+    });
+  });
+}
+
+// ── Online mode — joiner ─────────────────────────────────────────────────────
+function joinGame() {
+  const name = document.getElementById('join-name').value.trim();
+  const code = document.getElementById('join-code').value.trim().toUpperCase();
+  setErr('join-error','');
+  if (!name) { setErr('join-error','Enter your name.'); return; }
+  if (code.length !== 4) { setErr('join-error','Enter the 4-letter code.'); return; }
+
+  isOnline = true; isHost = false; myName = name; gameCode = code;
+
+  const btn = document.getElementById('join-btn');
+  btn.textContent = 'Connecting...'; btn.disabled = true;
+
+  // Joiner gets a random peer ID
+  peer = new Peer({ debug: 0 });
+
+  peer.on('open', () => {
+    hostConn = peer.connect('ws-' + code, { metadata: { name }, reliable: true });
+
+    hostConn.on('open', () => {
+      btn.textContent = 'Join →'; btn.disabled = false;
+      players = []; myIndex = -1;
+      document.getElementById('lobby-code').textContent = code;
+      document.getElementById('lobby-waiting-msg').style.display = 'block';
+      document.getElementById('lobby-start-row').style.display = 'none';
+      renderLobby();
+      showScreen('screen-lobby');
+      showChat();
+    });
+
+    hostConn.on('data', data => onGuestReceive(data));
+
+    hostConn.on('error', e => {
+      btn.textContent = 'Join →'; btn.disabled = false;
+      setErr('join-error', 'Could not connect. Check the code and try again.');
+    });
+
+    hostConn.on('close', () => {
+      setErr('join-error', 'Disconnected from host.');
+    });
+  });
+
+  peer.on('error', e => {
+    btn.textContent = 'Join →'; btn.disabled = false;
+    setErr('join-error', 'Connection error. Check the code and try again.');
+  });
+
+  setTimeout(() => {
+    if (btn.disabled) {
+      btn.textContent = 'Join →'; btn.disabled = false;
+      setErr('join-error', 'Timed out. Check the code and try again.');
+      peer.destroy();
+    }
+  }, 12000);
+}
+
+// ── Message routing ──────────────────────────────────────────────────────────
+// Host receives messages from a specific guest
+function onHostReceive(fromName, data) {
+  if (data.type === 'word') {
+    const idx = players.findIndex(p => p.name === fromName);
+    if (idx !== -1 && players[idx].tiles.length === 0) {
+      const padded = data.word.padEnd(charCount, ' ');
+      players[idx].word = padded;
+      players[idx].tiles = padded.split('').map(ch => ({ char: ch, revealed: false }));
+      assignTilePoints(players[idx].tiles);
+      wordsIn++;
+      const doneNames = players.filter(p => p.tiles.length > 0).map(p => p.name);
+      broadcastToAll({ type: 'word-ack', done: doneNames, total: players.length });
+      if (wordsIn === players.length) {
+        broadcastState();
+        beginPlay();
+      }
+    }
+  }
+  if (data.type === 'guess') {
+    processGuess(data.guesserIdx, data.targetIdx, data.letter);
+  }
+  if (data.type === 'chat') {
+    broadcastToOthers(fromName, data);
+    appendChat(data.name, data.text, false);
+  }
+}
+
+// Guests receive messages from host
+function onGuestReceive(data) {
+  if (data.type === 'roster') {
+    players = data.players.map(mkPlayer);
+    myIndex = players.findIndex(p => p.name === myName);
+    renderLobby();
+  }
+  if (data.type === 'start') {
+    charCount = data.charCount; rounds = data.rounds; gameMode = data.gameMode;
+    players = data.players.map(mkPlayer);
+    myIndex = players.findIndex(p => p.name === myName);
+    wordsIn = 0;
+    showOnlineEntry();
+  }
+  if (data.type === 'word-ack') {
+    renderEntryWaiting(data.done, data.total);
+  }
+  if (data.type === 'state') {
+    applyState(data.state);
+  }
+  if (data.type === 'chat') {
+    appendChat(data.name, data.text, false);
+  }
+}
+
+// ── Broadcast helpers ────────────────────────────────────────────────────────
+function broadcastToAll(msg) {
+  Object.values(guestConns).forEach(conn => {
+    try { conn.send(msg); } catch(e) {}
+  });
+}
+
+function broadcastToOthers(excludeName, msg) {
+  Object.entries(guestConns).forEach(([name, conn]) => {
+    if (name === excludeName) return;
+    try { conn.send(msg); } catch(e) {}
+  });
+}
+
+function broadcastState() {
+  const state = serializeState();
+  broadcastToAll({ type: 'state', state });
+}
+
+let _pendingSound = null;
+
+function serializeState() {
+  const s = {
+    players: players.map(p => ({
+      name: p.name, color: p.color, score: p.score, eliminated: p.eliminated,
+      tiles: p.tiles.map(t => ({ char: t.char, revealed: t.revealed, pointValue: t.pointValue || 0 })),
+      wrongGuesses: [...p.wrongGuesses]
+    })),
+    currentTurn, currentRound, gameMode, charCount, rounds,
+    sound: _pendingSound
+  };
+  _pendingSound = null;
+  return s;
+}
+
+function applyState(s) {
+  if (s.sound) {
+    if (s.sound === 'cracked') { sfx('cracked'); setTimeout(() => sfx('eliminated'), 500); }
+    else sfx(s.sound);
+  }
+  s.players.forEach((pd, i) => {
+    if (!players[i]) players[i] = mkPlayer(pd.name, i);
+    players[i].score = pd.score;
+    players[i].eliminated = pd.eliminated;
+    players[i].tiles = pd.tiles;
+    players[i].wrongGuesses = new Set(pd.wrongGuesses);
+  });
+  currentTurn = s.currentTurn; currentRound = s.currentRound;
+  gameMode = s.gameMode; charCount = s.charCount; rounds = s.rounds;
+  if (document.getElementById('screen-play').classList.contains('active')) {
+    renderPlay();
+  } else {
+    showScreen('screen-play');
+    renderPlay();
+  }
+  if (players.filter(p => !p.eliminated).length <= 1) showResults();
+}
+
+// ── Lobby ────────────────────────────────────────────────────────────────────
+function renderLobby() {
+  document.getElementById('lobby-code').textContent = gameCode;
+  const list = document.getElementById('lobby-player-list');
+  list.innerHTML = '';
+  players.forEach(p => {
+    const div = document.createElement('div');
+    div.className = 'lobby-player';
+    div.innerHTML = `<div class="lobby-dot" style="background:${p.color}"></div>
+      <span>${p.name}</span>
+      ${p.name === myName ? '<span style="font-size:0.75rem;color:#888;">(you)</span>' : ''}`;
+    list.appendChild(div);
+  });
+  document.getElementById('lobby-status').textContent =
+    players.length + ' player' + (players.length !== 1 ? 's' : '') + ' in lobby';
+  if (isHost) {
+    document.getElementById('lobby-start-row').style.display = players.length >= 2 ? 'flex' : 'none';
+  }
+}
+
+function hostStartGame() {
+  if (!isHost || players.length < 2) return;
+  const startMsg = { type: 'start', charCount, rounds, gameMode, players: players.map(p => p.name) };
+  broadcastToAll(startMsg);
+  wordsIn = 0;
+  showOnlineEntry();
+}
+
+// ── Word entry ────────────────────────────────────────────────────────────────
+function resetEntryUI() {
+  document.getElementById('word-input').value = '';
+  document.getElementById('char-counter').textContent = '0 / ' + charCount;
+  document.getElementById('char-counter').className = 'char-counter';
+  document.getElementById('entry-error').textContent = '';
+  document.getElementById('lock-btn').textContent = 'Lock it in';
+  document.getElementById('lock-btn').disabled = false;
+  document.getElementById('entry-card').style.display = 'block';
+  document.getElementById('entry-waiting').style.display = 'none';
+}
+
+function showOnlineEntry() {
+  document.getElementById('entry-heading').textContent = myName + ' — enter your word';
+  document.getElementById('entry-subtext').textContent = "Only you can see this. It's sent privately.";
+  resetEntryUI();
+  showScreen('screen-entry');
+  setTimeout(() => document.getElementById('word-input').focus(), 80);
+}
+
+function renderEntryWaiting(doneNames, total) {
+  document.getElementById('entry-ready-list').innerHTML = players.map(p =>
+    `<div class="ready-row ${doneNames.includes(p.name)?'done':'pending'}">
+      ${doneNames.includes(p.name)?'✓':'○'} ${p.name}
+    </div>`
+  ).join('');
+}
+
+function onWordInput() {
+  const input = document.getElementById('word-input');
+  const cleaned = input.value.replace(/[^a-zA-Z ]/g, '');
+  if (input.value !== cleaned) input.value = cleaned;
+  const len = cleaned.length;
+  const ctr = document.getElementById('char-counter');
+  ctr.textContent = len + ' / ' + charCount;
+  ctr.className = 'char-counter' + (len > charCount ? ' over' : '');
+  document.getElementById('entry-error').textContent = '';
+}
+
+async function checkWord(word) {
+  try {
+    const r = await fetch('https://api.dictionaryapi.dev/api/v2/entries/en/' + encodeURIComponent(word.toLowerCase()));
+    return r.ok;
+  } catch(e) { return true; }
+}
+
+async function submitWord() {
+  const raw = document.getElementById('word-input').value.trim();
+  const err = document.getElementById('entry-error');
+  const btn = document.getElementById('lock-btn');
+  if (!raw) { err.textContent = 'Enter a word or phrase!'; return; }
+  if (raw.length > charCount) { err.textContent = 'Too long! Max ' + charCount + ' chars.'; return; }
+
+  const words = raw.split(/\s+/).filter(Boolean);
+  btn.textContent = 'Checking...'; btn.disabled = true;
+  for (const w of words) {
+    if (!await checkWord(w)) {
+      err.textContent = '"' + w + '" doesn\'t look like a real word.';
+      btn.textContent = 'Lock it in'; btn.disabled = false;
+      return;
+    }
+  }
+  btn.textContent = 'Lock it in'; btn.disabled = false;
+  sfx('lock');
+
+  if (isOnline) {
+    if (isHost) {
+      // Host stores their own word locally
+      const padded = raw.padEnd(charCount, ' ');
+      players[myIndex].word = padded;
+      players[myIndex].tiles = padded.split('').map(ch => ({ char: ch, revealed: false }));
+      assignTilePoints(players[myIndex].tiles);
+      wordsIn++;
+      const doneNames = players.filter(p => p.tiles.length > 0).map(p => p.name);
+      broadcastToAll({ type: 'word-ack', done: doneNames, total: players.length });
+      if (wordsIn === players.length) { broadcastState(); beginPlay(); }
+    } else {
+      // Guest sends word to host
+      hostConn.send({ type: 'word', word: raw });
+    }
+    document.getElementById('entry-card').style.display = 'none';
+    document.getElementById('entry-waiting').style.display = 'block';
+    renderEntryWaiting(players.filter(p => p.tiles.length > 0).map(p => p.name), players.length);
+  } else {
+    const padded = raw.padEnd(charCount, ' ');
+    players[currentEntryIndex].word = padded;
+    players[currentEntryIndex].tiles = padded.split('').map(ch => ({ char: ch, revealed: false }));
+    assignTilePoints(players[currentEntryIndex].tiles);
+    currentEntryIndex++;
+    if (currentEntryIndex < players.length) showLocalEntry();
+    else beginPlay();
+  }
+}
+
+// ── Play ──────────────────────────────────────────────────────────────────────
+function beginPlay() {
+  currentTurn = 0; currentRound = 1;
+  selectedTarget = null; selectedLetter = null;
+  showScreen('screen-play');
+  renderPlay();
+  if (!isOnline) sfx('turn');
+}
+
+function activeIdx() {
+  let i = currentTurn % players.length, n = 0;
+  while (players[i].eliminated && n++ < players.length) i = (i+1) % players.length;
+  return i;
+}
+
+function isMyTurn() { return !isOnline || activeIdx() === myIndex; }
+
+function renderPlay() {
+  const ai = activeIdx();
+  document.getElementById('turn-name').textContent = players[ai].name;
+  document.getElementById('round-label').textContent =
+    gameMode === 'points' ? ' — Round ' + currentRound + ' of ' + rounds : '';
+
+  const notEl = document.getElementById('not-your-turn');
+  if (isOnline && !isMyTurn()) {
+    notEl.style.display = 'block';
+    notEl.textContent = 'Waiting for ' + players[ai].name + ' to guess...';
+  } else { notEl.style.display = 'none'; sfx('turn'); }
+
+  const bc = document.getElementById('boards');
+  bc.innerHTML = '';
+  players.forEach((p, i) => {
+    const d = document.createElement('div');
+    d.className = 'board';
+    d.innerHTML = `<div class="board-header">
+      <div class="board-name" style="color:${p.color}">${p.name}${isOnline&&p.name===myName?' (you)':''}</div>
+      <div class="board-status ${p.eliminated?'status-eliminated':'status-alive'}">${p.eliminated?'eliminated':'alive'}</div>
+      ${gameMode==='points'?`<div class="board-score">${p.score} pts</div>`:''}
+    </div><div class="tiles" id="tiles-${i}"></div>`;
+    bc.appendChild(d);
+    const tc = document.getElementById('tiles-'+i);
+    p.tiles.forEach(t => {
+      const el = document.createElement('div');
+      const sp = t.char === ' ';
+      el.className = t.revealed ? (sp ? 'tile blank-revealed' : 'tile revealed') : 'tile hidden';
+      el.textContent = t.revealed ? (sp ? '·' : t.char.toUpperCase()) : '?';
+      tc.appendChild(el);
+    });
+  });
+
+  document.getElementById('action-panel').classList.toggle('locked', isOnline && !isMyTurn());
+
+  const tb = document.getElementById('targets');
+  tb.innerHTML = '';
+  players.forEach((p, i) => {
+    if (i === ai || p.eliminated) return;
+    const b = document.createElement('button');
+    b.className = 'target-btn' + (selectedTarget===i?' selected':'');
+    b.textContent = p.name;
+    b.onclick = () => { selectedTarget = i; renderLetterGrid(); renderTargets(); };
+    tb.appendChild(b);
+  });
+
+  renderLetterGrid();
+  document.getElementById('feedback').textContent = '';
+  document.getElementById('feedback').className = 'feedback';
+}
+
+function renderTargets() {
+  const ai = activeIdx();
+  document.querySelectorAll('.target-btn').forEach(b => {
+    const idx = players.findIndex((p,i) => i!==ai && !p.eliminated && p.name===b.textContent);
+    b.classList.toggle('selected', idx===selectedTarget);
+  });
+}
+
+function renderLetterGrid() {
+  const lg = document.getElementById('letters');
+  lg.innerHTML = '';
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  let correct = new Set(), wrong = new Set();
+  if (selectedTarget !== null) {
+    const t = players[selectedTarget];
+    letters.forEach(l => {
+      const lo = l.toLowerCase();
+      if (t.tiles.some(ti => ti.char.toLowerCase()===lo && ti.revealed)) correct.add(l);
+      else if (t.wrongGuesses && t.wrongGuesses.has(lo)) wrong.add(l);
+    });
+  }
+  letters.forEach(l => {
+    const b = document.createElement('button');
+    b.className = 'letter-btn';
+    b.textContent = l;
+    if (correct.has(l)) b.className += ' used-correct';
+    else if (wrong.has(l)) { b.className += ' used-wrong'; b.disabled = true; }
+    else if (selectedLetter === l) b.className += ' selected';
+    b.onclick = () => { if (b.disabled) return; selectedLetter = selectedLetter===l?null:l; renderLetterGrid(); };
+    lg.appendChild(b);
+  });
+  const bb = document.createElement('button');
+  bb.className = 'blank-btn' + (selectedLetter===' '?' selected':'');
+  bb.textContent = 'SPACE / BLANK';
+  bb.onclick = () => { selectedLetter = selectedLetter===' '?null:' '; renderLetterGrid(); };
+  lg.appendChild(bb);
+}
+
+function makeGuess() {
+  if (selectedTarget === null) { setFeedback('Pick a target first.','info'); return; }
+  if (selectedLetter === null) { setFeedback('Pick a letter or blank.','info'); return; }
+  if (isOnline && !isHost) {
+    hostConn.send({ type:'guess', guesserIdx:myIndex, targetIdx:selectedTarget, letter:selectedLetter });
+    selectedLetter = null; renderLetterGrid(); return;
+  }
+  processGuess(activeIdx(), selectedTarget, selectedLetter);
+}
+
+
+function assignTilePoints(tiles) {
+  const vals = [5, 10, 15];
+  const letterTiles = tiles.filter(t => t.char !== ' ');
+  if (letterTiles.length === 0) return;
+  const twentyFiveIdx = Math.floor(Math.random() * letterTiles.length);
+  let letterCount = 0;
+  tiles.forEach(t => {
+    if (t.char === ' ') { t.pointValue = 0; return; }
+    if (letterCount === twentyFiveIdx) { t.pointValue = 25; }
+    else { t.pointValue = vals[Math.floor(Math.random() * vals.length)]; }
+    letterCount++;
+  });
+}
+
+function processGuess(gi, ti, letter) {
+  const target = players[ti];
+  const lc = letter.toLowerCase();
+  if (!target.wrongGuesses) target.wrongGuesses = new Set();
+  const tileIdx = target.tiles.findIndex(t => !t.revealed && t.char.toLowerCase()===lc);
+
+  if (tileIdx !== -1) {
+    const tile = target.tiles[tileIdx];
+    tile.revealed = true;
+    const pts = (gameMode === 'points') ? (tile.pointValue || 5) : 0;
+    if (gameMode === 'points') players[gi].score += pts;
+    if (target.tiles.every(t => t.revealed)) {
+      if (gameMode === 'points') players[gi].score += 30;
+      target.eliminated = true;
+      _pendingSound = 'cracked';
+      sfx('cracked'); setTimeout(() => sfx('eliminated'), 500);
+      const totalPts = pts + 30;
+      setFeedback(target.name+"'s board cracked!" + (gameMode==='points' ? ' +'+totalPts+' pts' : ''), 'correct');
+      if (isOnline && isHost) broadcastState();
+      if (players.filter(p => !p.eliminated).length <= 1) { setTimeout(showResults, 1200); return; }
+    } else {
+      _pendingSound = 'correct';
+      sfx('correct');
+      setFeedback('Correct!' + (gameMode==='points' ? ' +'+pts+' pts' : ' A "' + (letter===' '?'space':letter.toUpperCase()) + '" revealed.'), 'correct');
+      if (isOnline && isHost) broadcastState();
+    }
+    selectedLetter = null;
+    setTimeout(renderPlay, 800);
+  } else {
+    target.wrongGuesses.add(lc);
+    _pendingSound = 'wrong';
+    sfx('wrong');
+    setFeedback('Nope! No "' + (letter===' '?'space':letter.toUpperCase()) + '" there.', 'wrong');
+    selectedLetter = null;
+    setTimeout(() => {
+      currentTurn++;
+      if (gameMode==='points' && currentTurn % players.length === 0) {
+        currentRound++;
+        if (currentRound > rounds) { if(isOnline&&isHost) broadcastState(); showResults(); return; }
+      }
+      selectedTarget = null; selectedLetter = null; renderPlay();
+      if (isOnline && isHost) broadcastState();
+    }, 900);
+  }
+}
+
+function setFeedback(msg, type) {
+  const el = document.getElementById('feedback');
+  el.textContent = msg; el.className = 'feedback '+type;
+}
+
+// ── Results ───────────────────────────────────────────────────────────────────
+function showResults() {
+  showScreen('screen-results');
+  const sorted = [...players].sort((a,b) =>
+    gameMode==='points' ? b.score-a.score :
+    (!a.eliminated&&b.eliminated?-1:a.eliminated&&!b.eliminated?1:0));
+  document.getElementById('winner-text').textContent = sorted[0].name + ' wins!';
+  document.getElementById('result-sub').textContent =
+    gameMode==='points' ? 'Points mode final scores' : 'Last player standing';
+  const t = document.getElementById('scoreboard');
+  t.innerHTML = `<tr><th>Player</th>${gameMode==='points'?'<th>Score</th>':''}<th>Status</th></tr>`;
+  sorted.forEach((p,i) => {
+    const tr = document.createElement('tr');
+    if (i===0) tr.className='winner';
+    tr.innerHTML = `<td style="color:${p.color}">${p.name}</td>
+      ${gameMode==='points'?`<td>${p.score} pts</td>`:''}
+      <td>${p.eliminated?'Eliminated':'Survived'}</td>`;
+    t.appendChild(tr);
+  });
+}
+
+function playAgain() {
+  if (peer) { peer.destroy(); peer=null; }
+  hostConn=null; guestConns={};
+  players=[]; currentEntryIndex=0; currentTurn=0; currentRound=1;
+  selectedTarget=null; selectedLetter=null;
+  isOnline=false; isHost=false; myName=''; myIndex=-1; gameCode=''; wordsIn=0;
+  showScreen('screen-home');
+}
+
+
+// ── Sound engine ──────────────────────────────────────────────────────────────
+let _ac = null;
+function ac() {
+  if (!_ac) _ac = new (window.AudioContext || window.webkitAudioContext)();
+  if (_ac.state === 'suspended') _ac.resume();
+  return _ac;
+}
+function sfx(id) {
+  try {
+    const c = ac();
+    const sounds = {
+      correct: () => {
+        const o = c.createOscillator(), g = c.createGain();
+        o.connect(g); g.connect(c.destination);
+        o.type = 'square'; o.frequency.value = 300;
+        o.frequency.linearRampToValueAtTime(700, c.currentTime + 0.08);
+        g.gain.setValueAtTime(0.15, c.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.12);
+        o.start(); o.stop(c.currentTime + 0.12);
+      },
+      wrong: () => {
+        const o = c.createOscillator(), g = c.createGain();
+        o.connect(g); g.connect(c.destination);
+        o.type = 'square'; o.frequency.value = 500;
+        o.frequency.linearRampToValueAtTime(150, c.currentTime + 0.1);
+        g.gain.setValueAtTime(0.15, c.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.14);
+        o.start(); o.stop(c.currentTime + 0.14);
+      },
+      cracked: () => {
+        const freqs = [523,659,784,659,784,988,1047];
+        freqs.forEach((f, i) => {
+          const o = c.createOscillator(), g = c.createGain();
+          o.connect(g); g.connect(c.destination);
+          o.type = 'square'; o.frequency.value = f;
+          const t = c.currentTime + i * 0.06;
+          g.gain.setValueAtTime(0.1, t);
+          g.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+          o.start(t); o.stop(t + 0.08);
+        });
+      },
+      eliminated: () => {
+        [392, 330, 277, 220].forEach((f, i) => {
+          const o = c.createOscillator(), g = c.createGain();
+          o.connect(g); g.connect(c.destination);
+          o.type = 'sawtooth'; o.frequency.value = f;
+          const t = c.currentTime + i * 0.18;
+          g.gain.setValueAtTime(0.18, t);
+          g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+          o.start(t); o.stop(t + 0.22);
+        });
+      },
+      turn: () => {
+        const o = c.createOscillator(), g = c.createGain();
+        o.connect(g); g.connect(c.destination);
+        o.type = 'sine'; o.frequency.value = 880;
+        g.gain.setValueAtTime(0.25, c.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.6);
+        o.start(); o.stop(c.currentTime + 0.6);
+      },
+      lock: () => {
+        [440, 554].forEach((f, i) => {
+          const o = c.createOscillator(), g = c.createGain();
+          o.connect(g); g.connect(c.destination);
+          o.type = 'sine'; o.frequency.value = f;
+          const t = c.currentTime + i * 0.09;
+          g.gain.setValueAtTime(0.2, t);
+          g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+          o.start(t); o.stop(t + 0.15);
+        });
+      }
+    };
+    if (sounds[id]) sounds[id]();
+  } catch(e) {}
+}
+
+
+// ── Chat ──────────────────────────────────────────────────────────────────────
+function showChat() {
+  ['lobby-chat-messages','play-chat-messages'].forEach(id => { const el = document.getElementById(id); if(el) el.innerHTML=''; });
+  document.getElementById('lobby-chat').style.display = 'block';
+  document.getElementById('play-chat').style.display = 'block';
+}
+
+function sendChat(context) {
+  const inputId = context === 'lobby' ? 'lobby-chat-input' : 'play-chat-input';
+  const input = document.getElementById(inputId);
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  const msg = { type: 'chat', name: myName, text };
+  if (isHost) {
+    broadcastToAll(msg);
+  } else {
+    hostConn.send(msg);
+  }
+  appendChat(myName, text, false);
+}
+
+function appendChat(name, text, isSystem) {
+  const ids = ['lobby-chat-messages', 'play-chat-messages'];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const player = players.find(p => p.name === name);
+    const color = player ? player.color : '#aaa';
+    const div = document.createElement('div');
+    div.className = 'chat-msg' + (isSystem ? ' system' : '');
+    if (isSystem) {
+      div.textContent = text;
+    } else {
+      div.innerHTML = `<span class="chat-name" style="color:${color}">${name}</span>${text}`;
+    }
+    el.appendChild(div);
+    el.scrollTop = el.scrollHeight;
+  });
+}
+
+// Init local player slots
+addPlayer('Player 1'); addPlayer('Player 2'); addPlayer('Player 3');
+</script>
+</body>
+</html>
