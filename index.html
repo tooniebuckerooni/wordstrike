@@ -421,16 +421,21 @@
     <div class="dc-flame" id="daily-card-flame"></div>
   </div>
   <div class="card">
+    <div class="play-type-card" onclick="showScreen('screen-join')" style="margin-bottom:1rem;">
+      <div class="icon">🔑</div>
+      <h3>Join a game</h3>
+      <p>Got a 4-letter code? Jump in.</p>
+    </div>
     <div class="play-type-cards">
+      <div class="play-type-card" onclick="showScreen('screen-online-setup')">
+        <div class="icon">🌐</div>
+        <h3>Host online</h3>
+        <p>Get a 4-letter code to share.</p>
+      </div>
       <div class="play-type-card" onclick="chooseLocal()">
         <div class="icon">🖥️</div>
         <h3>Same Device</h3>
         <p>Everyone plays on one screen. Pass and play.</p>
-      </div>
-      <div class="play-type-card" onclick="showScreen('screen-online-setup')">
-        <div class="icon">🌐</div>
-        <h3>Online</h3>
-        <p>4-letter code. No sign-up needed.</p>
       </div>
     </div>
   </div>
@@ -489,7 +494,7 @@
 <!-- ONLINE SETUP -->
 <div id="screen-online-setup" class="screen">
   <div class="card">
-    <h2 style="font-size:1.1rem;color:var(--jab);margin-bottom:1rem;">Set up online game</h2>
+    <h2 style="font-size:1.1rem;color:var(--jab);margin-bottom:1rem;">Host a game</h2>
     <label>Your name</label>
     <input type="text" id="host-name" placeholder="your player name">
     <label>Game mode</label>
@@ -512,10 +517,6 @@
   <div class="btn-row">
     <button class="btn-secondary" onclick="showScreen('screen-home')">← Back</button>
     <button class="btn-primary" id="create-btn" onclick="createGame()" style="flex:1;">Create game →</button>
-  </div>
-  <div style="text-align:center;margin-top:1rem;font-size:0.85rem;color:var(--muted);">
-    Have a code already?
-    <button class="btn-secondary btn-sm" style="margin-left:0.5rem;" onclick="showScreen('screen-join')">Join a game</button>
   </div>
 </div>
 
