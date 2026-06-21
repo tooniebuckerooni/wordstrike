@@ -712,6 +712,7 @@
     <div class="streak-row" id="daily-streak-row"></div>
   </div>
   <div class="btn-row">
+    <button class="btn-secondary" id="daily-share-btn" onclick="shareDailyResult()" style="flex:1;">Share result</button>
     <button class="btn-primary" onclick="showScreen('screen-home');renderDailyHomeBadge();" style="flex:1;">&larr; Back home</button>
   </div>
 </div>
@@ -2273,6 +2274,13 @@ function seedFromDate(str) {
 }
 function getDailyWord() { return DAILY_WORDS[seedFromDate(todayStr()) % DAILY_WORDS.length]; }
 
+const DAILY_EPOCH = new Date(2024, 0, 1);
+function dailyDayNumber() {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const epoch = new Date(DAILY_EPOCH); epoch.setHours(0,0,0,0);
+  return Math.floor((today - epoch) / 86400000) + 1;
+}
+
 function getDailyState() {
   try {
     const raw = localStorage.getItem(DAILY_KEY);
@@ -2436,6 +2444,48 @@ function showDailyResultScreen(won, word, roundsLeft, state) {
   document.getElementById('daily-streak-row').innerHTML =
     '<div class="streak-box"><div class="num">' + state.streak + '</div><div class="lbl">current streak</div></div>' +
     '<div class="streak-box"><div class="num">' + state.best + '</div><div class="lbl">best streak</div></div>';
+
+  lastDailyShare = { won, word, roundsLeft, streak: state.streak };
+}
+
+let lastDailyShare = null;
+
+function shareDailyResult() {
+  if (!lastDailyShare) return;
+  const { won, word, roundsLeft, streak } = lastDailyShare;
+  const greenSquares = won ? roundsLeft : 0;
+  const redSquares = DAILY_ROUNDS - greenSquares;
+  const squares = '\u{1F7E9}'.repeat(greenSquares) + '\u{1F7E5}'.repeat(redSquares);
+  const text = 'WordJab Daily #' + dailyDayNumber() + '\n' +
+    (won ? 'Cracked it \u{1F3C6}' : 'Down for the count \u{1F94A}') + '\n' +
+    squares + '\n' +
+    '\u{1F525} ' + streak + ' streak\n' +
+    'wordjab.io';
+
+  const btn = document.getElementById('daily-share-btn');
+  const showCopied = () => {
+    if (!btn) return;
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  };
+
+  const fallbackCopy = () => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); showCopied(); } catch(e) {}
+    document.body.removeChild(ta);
+  };
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(showCopied).catch(fallbackCopy);
+  } else {
+    fallbackCopy();
+  }
 }
 
 // Init local player slots
