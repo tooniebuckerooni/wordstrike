@@ -2312,7 +2312,7 @@ function openDailyJab() {
   const state = getDailyState();
   const today = todayStr();
   if (state.lastPlayedDate === today) {
-    showDailyResultScreen(state.lastResult === 'win', getDailyWord(), 0, state);
+    showDailyResultScreen(state.lastResult === 'win', getDailyWord(), state.lastRoundsLeft||0, state);
     return;
   }
   const word = getDailyWord();
@@ -2409,6 +2409,7 @@ function finishDaily(won) {
   state.best = Math.max(state.best||0, state.streak);
   state.lastPlayedDate = today;
   state.lastResult = won ? 'win' : 'lose';
+  state.lastRoundsLeft = dailyRoundsLeft;
   saveDailyState(state);
   showDailyResultScreen(won, dailyTiles.map(t => t.char).join(''), dailyRoundsLeft, state);
 }
