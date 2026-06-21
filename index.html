@@ -466,11 +466,11 @@
     <h2 style="font-size:1.1rem;color:var(--jab);margin-bottom:1rem;">Game Settings</h2>
     <label id="mode-group-label">Game mode</label>
     <div class="mode-cards" role="radiogroup" aria-labelledby="mode-group-label">
-      <div class="mode-card selected" id="mode-last" role="radio" aria-checked="true" tabindex="0" onclick="selectMode('last')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectMode('last');}">
+      <div class="mode-card selected" id="mode-last" role="radio" aria-checked="true" tabindex="0" onclick="selectMode('last')" onkeydown="radioGroupKeyNav(event,'mode-','last',selectMode)">
         <h3>Last Standing</h3>
         <p>Get your word fully guessed and you're out. Last player alive wins.</p>
       </div>
-      <div class="mode-card" id="mode-points" role="radio" aria-checked="false" tabindex="0" onclick="selectMode('points')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectMode('points');}">
+      <div class="mode-card" id="mode-points" role="radio" aria-checked="false" tabindex="0" onclick="selectMode('points')" onkeydown="radioGroupKeyNav(event,'mode-','points',selectMode)">
         <h3>Points</h3>
         <p>Earn points for correct letters and cracked words. Highest score wins.</p>
       </div>
@@ -501,10 +501,10 @@
     <input type="text" id="host-name" placeholder="your player name">
     <label id="omode-group-label">Game mode</label>
     <div class="mode-cards" role="radiogroup" aria-labelledby="omode-group-label">
-      <div class="mode-card selected" id="omode-last" role="radio" aria-checked="true" tabindex="0" onclick="selectOnlineMode('last')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectOnlineMode('last');}">
+      <div class="mode-card selected" id="omode-last" role="radio" aria-checked="true" tabindex="0" onclick="selectOnlineMode('last')" onkeydown="radioGroupKeyNav(event,'omode-','last',selectOnlineMode)">
         <h3>Last Standing</h3><p>Last player alive wins.</p>
       </div>
-      <div class="mode-card" id="omode-points" role="radio" aria-checked="false" tabindex="0" onclick="selectOnlineMode('points')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectOnlineMode('points');}">
+      <div class="mode-card" id="omode-points" role="radio" aria-checked="false" tabindex="0" onclick="selectOnlineMode('points')" onkeydown="radioGroupKeyNav(event,'omode-','points',selectOnlineMode)">
         <h3>Points</h3><p>Highest score wins.</p>
       </div>
     </div>
@@ -759,6 +759,20 @@ function showScreen(id) {
   if (heading) {
     if (!heading.hasAttribute('tabindex')) heading.setAttribute('tabindex', '-1');
     heading.focus({ preventScroll: true });
+  }
+}
+
+// Two-option radio group keyboard handling (Enter/Space activates focused option,
+// arrow keys move focus + selection to the other option), per ARIA radio pattern.
+function radioGroupKeyNav(e, idPrefix, mode, selectFn) {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    selectFn(mode);
+  } else if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+    e.preventDefault();
+    const other = mode === 'last' ? 'points' : 'last';
+    selectFn(other);
+    document.getElementById(idPrefix + other).focus();
   }
 }
 
@@ -2196,7 +2210,7 @@ async function loadSharedLeaderboard() {
 
   // Top scores
   const topScores = record.topScores || [];
-  html += '<div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">🏆 top scores</div>';
+  html += '<div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;"><span aria-hidden="true">🏆</span> top scores</div>';
   if (topScores.length === 0) {
     html += '<div class="lb-empty" style="padding:0.5rem 0;">No scores yet.</div>';
   } else {
