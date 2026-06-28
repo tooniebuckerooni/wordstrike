@@ -636,6 +636,8 @@
     <h2 id="winner-text" style="color:var(--jab);margin-bottom:0.5rem;font-family:'Anton',sans-serif;text-transform:uppercase;letter-spacing:0.02em;"></h2>
     <p id="result-sub" style="color:var(--muted);font-size:0.85rem;margin-bottom:1.5rem;"></p>
     <table class="scoreboard" id="scoreboard"></table>
+    <h3 style="font-size:0.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;font-weight:600;margin:1.25rem 0 0.75rem;text-align:left;">Words revealed</h3>
+    <div id="results-words" style="text-align:left;"></div>
   </div>
   <div class="btn-row">
     <button class="btn-primary" onclick="playAgain()" style="flex:1;">Play again</button>
@@ -1055,7 +1057,9 @@ function onGuestReceive(data) {
     showOnlineEntry();
   }
   if (data.type === 'chat') {
-    appendChat(data.name, data.text, false);
+    // Host relays guest chat to everyone, including the original sender —
+    // skip re-appending our own message since we already showed it optimistically.
+    if (data.name !== myName) appendChat(data.name, data.text, false);
   }
   if (data.type === 'game-over') {
     showResults();
@@ -1846,6 +1850,26 @@ function showResults() {
       ${gameMode==='points'?`<td>${p.score} pts</td>`:''}
       <td>${p.eliminated?'Eliminated':'Survived'}</td>`;
     t.appendChild(tr);
+  });
+
+  // Reveal every player's secret word now that the game is over.
+  const wordsEl = document.getElementById('results-words');
+  wordsEl.innerHTML = '';
+  sorted.forEach(p => {
+    if (!p.tiles.length) return;
+    const row = document.createElement('div');
+    row.className = 'board';
+    row.innerHTML = `<div class="board-header"><div class="board-name" style="color:${p.color}">${p.name}</div></div>
+      <div class="tiles"></div>`;
+    wordsEl.appendChild(row);
+    const tc = row.querySelector('.tiles');
+    p.tiles.forEach(t => {
+      const el = document.createElement('div');
+      const sp = t.char === ' ';
+      el.className = sp ? 'tile blank-revealed' : 'tile revealed';
+      el.textContent = sp ? '·' : t.char.toUpperCase();
+      tc.appendChild(el);
+    });
   });
 }
 
