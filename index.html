@@ -530,6 +530,11 @@
         <p>Everyone plays on one screen. Pass and play.</p>
       </div>
     </div>
+    <div class="play-type-card" role="button" tabindex="0" aria-label="Practice vs the bot — no friends around? Spar solo" onclick="startBotGame()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();startBotGame();}">
+      <div class="icon" aria-hidden="true">🤖</div>
+      <h3>Practice vs the Bot</h3>
+      <p>No friends around? Spar a round against JabBot.</p>
+    </div>
   </div>
   <div class="card" style="padding-bottom:0.75rem;">
     <div class="lb-tabs">
@@ -555,7 +560,7 @@
     <ol class="how-steps">
       <li><strong>Host a game</strong> and share the 4-letter code, or gather around one screen with pass-and-play.</li>
       <li><strong>Pick your secret word</strong> — a real word or phrase up to the character limit. Nobody else can see it.</li>
-      <li><strong>Take turns jabbing.</strong> Pick an opponent, throw a letter. A hit reveals every matching tile and you go again; a miss passes the turn.</li>
+      <li><strong>Take turns jabbing.</strong> Pick an opponent, throw a letter. A hit reveals a matching tile and you jab again; a miss passes the turn.</li>
       <li><strong>Win the fight.</strong> In Last Standing, survive with your word uncracked. In Points mode, score for every hit and cracked board.</li>
     </ol>
     <p>Too busy for a full bout? The <strong>Daily Jab</strong> gives you one word and six jabs every day — keep your streak alive and share your result.</p>
@@ -685,6 +690,25 @@
       <p>Share this code with friends</p>
       <div class="code" id="lobby-code">----</div>
       <p>They open the game and click Online → Join a game</p>
+      <button class="btn-secondary btn-sm" id="copy-invite-btn" onclick="copyInviteLink()" style="margin-top:0.6rem;">🔗 Copy invite link</button>
+    </div>
+    <div id="lobby-settings" style="display:none;">
+      <label id="lmode-group-label">Game mode</label>
+      <div class="mode-cards" role="radiogroup" aria-labelledby="lmode-group-label">
+        <div class="mode-card selected" id="lmode-last" role="radio" aria-checked="true" tabindex="0" onclick="selectLobbyMode('last')" onkeydown="radioGroupKeyNav(event,'lmode-','last',selectLobbyMode)">
+          <h3>Last Standing</h3><p>Last player alive wins.</p>
+        </div>
+        <div class="mode-card" id="lmode-points" role="radio" aria-checked="false" tabindex="0" onclick="selectLobbyMode('points')" onkeydown="radioGroupKeyNav(event,'lmode-','points',selectLobbyMode)">
+          <h3>Points</h3><p>Highest score wins.</p>
+        </div>
+      </div>
+      <label for="l-char-count">Characters per board (including spaces)</label>
+      <input type="number" id="l-char-count" value="10" min="4" max="30">
+      <div id="l-points-options" style="display:none;">
+        <label for="l-rounds">Rounds</label>
+        <input type="number" id="l-rounds" value="5" min="1" max="20">
+      </div>
+      <div style="height:0.75rem;"></div>
     </div>
     <div id="lobby-player-list" aria-live="polite"></div>
     <div id="lobby-status" aria-live="polite" style="font-size:0.85rem;color:var(--muted);text-align:center;margin-top:0.5rem;"></div>
@@ -770,8 +794,21 @@
     <h3 style="font-size:0.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;font-weight:600;margin:1.25rem 0 0.75rem;text-align:left;">Words revealed</h3>
     <div id="results-words" style="text-align:left;"></div>
   </div>
+  <div class="chat-box" id="results-chat" style="display:none;">
+    <div class="chat-header">game chat — plan the rematch</div>
+    <div class="chat-messages" id="results-chat-messages"></div>
+    <div class="chat-input-row">
+      <input type="text" id="results-chat-input" aria-label="Chat message" placeholder="say something..." maxlength="200"
+        onkeydown="if(event.key==='Enter') sendChat('results')">
+      <button class="chat-send-btn" onclick="sendChat('results')">Send</button>
+    </div>
+  </div>
   <div class="btn-row">
-    <button class="btn-primary" onclick="playAgain()" style="flex:1;">Play again</button>
+    <button class="btn-primary" id="rematch-btn" onclick="rematchGame()" style="flex:1;">Rematch →</button>
+    <button class="btn-secondary" onclick="playAgain()" style="flex:1;">Home</button>
+  </div>
+  <div id="results-guest-msg" style="display:none;text-align:center;font-size:0.8rem;color:var(--muted);margin-top:0.5rem;">
+    If the host starts a rematch, you'll jump straight back into the lobby.
   </div>
   <div class="donate-results" id="results-donate-strip" style="display:none;">
     <a id="results-donate-btn" href="#" target="_blank" rel="noopener">
@@ -948,7 +985,7 @@ function generateCode() {
 }
 
 // ── Local mode ──────────────────────────────────────────────────────────────
-function chooseLocal() { isOnline = false; showScreen('screen-setup'); }
+function chooseLocal() { isOnline = false; botMode = false; showScreen('screen-setup'); }
 
 function selectMode(m) {
   gameMode = m;
@@ -1006,7 +1043,7 @@ async function createGame() {
 
   charCount = clampInt(document.getElementById('o-char-count').value, 4, 30, 10);
   rounds    = clampInt(document.getElementById('o-rounds').value, 1, 20, 5);
-  isOnline = true; isHost = true; myName = name;
+  isOnline = true; isHost = true; botMode = false; myName = name;
   gameCode = generateCode();
 
   const btn = document.getElementById('create-btn');
@@ -1018,6 +1055,7 @@ async function createGame() {
     myIndex = 0; wordsIn = 0;
     btn.textContent = 'Create game →'; btn.disabled = false;
     showGameCodeBanner(gameCode);
+    syncLobbySettings();
     renderLobby();
     showScreen('screen-lobby');
     showChat();
@@ -1036,7 +1074,7 @@ async function joinGame() {
   if (!name) { setErr('join-error','Enter your name.'); return; }
   if (code.length !== 4) { setErr('join-error','Enter the 4-letter code.'); return; }
 
-  isOnline = true; isHost = false; myName = name; gameCode = code;
+  isOnline = true; isHost = false; botMode = false; myName = name; gameCode = code;
 
   const btn = document.getElementById('join-btn');
   btn.textContent = 'Connecting...'; btn.disabled = true;
@@ -1048,6 +1086,7 @@ async function joinGame() {
     publish({ type: 'rejoin', name });
     players = []; myIndex = -1;
     document.getElementById('lobby-code').textContent = code;
+    document.getElementById('lobby-settings').style.display = 'none';
     document.getElementById('lobby-waiting-msg').style.display = 'block';
     document.getElementById('lobby-start-row').style.display = 'none';
     showGameCodeBanner(code);
@@ -1126,7 +1165,10 @@ function onHostReceive(fromName, data) {
     const idx = players.findIndex(p => p.name === fromName);
     if (idx !== -1) {
       const wasAlreadyIn = players[idx].tiles.length > 0;
-      const padded = data.word.padEnd(charCount, ' ');
+      // Enforce the same rules the client UI applies — letters/spaces, max length
+      const cleaned = String(data.word || '').replace(/[^a-zA-Z ]/g, '').trim().slice(0, charCount);
+      if (!cleaned) return;
+      const padded = cleaned.padEnd(charCount, ' ');
       players[idx].word = padded;
       players[idx].tiles = padded.split('').map(ch => ({ char: ch, revealed: false }));
       assignTilePoints(players[idx].tiles);
@@ -1141,7 +1183,13 @@ function onHostReceive(fromName, data) {
     }
   }
   if (data.type === 'guess') {
-    processGuess(data.guesserIdx, data.targetIdx, data.letter);
+    // Validate before processing: right player, their turn, sane target/letter
+    const gi = data.guesserIdx, ti = data.targetIdx;
+    if (!players[gi] || players[gi].name !== fromName) return;
+    if (gi !== activeIdx()) return;
+    if (!players[ti] || ti === gi || players[ti].eliminated) return;
+    if (typeof data.letter !== 'string' || !/^[a-zA-Z ]$/.test(data.letter)) return;
+    processGuess(gi, ti, data.letter);
   }
   if (data.type === 'rejoin') {
     const idx = players.findIndex(p => p.name === data.name);
@@ -1210,7 +1258,18 @@ function onGuestReceive(data) {
     else if (data.name !== myName) appendChat(data.name, data.text, false);
   }
   if (data.type === 'game-over') {
+    // Host reveals everyone's full words only now that the game is over
+    if (Array.isArray(data.reveal)) {
+      data.reveal.forEach(r => {
+        const p = players.find(pl => pl.name === r.name);
+        if (p && Array.isArray(r.tiles)) p.tiles = r.tiles;
+      });
+    }
     showResults();
+  }
+  if (data.type === 'rematch') {
+    resetForRematch();
+    enterRematchLobby();
   }
   if (data.type === 'spin') {
     _pendingSpinOrder = data.order;
@@ -1288,7 +1347,9 @@ function serializeState() {
   const s = {
     players: players.map(p => ({
       name: p.name, color: p.color, score: p.score, eliminated: p.eliminated,
-      tiles: p.tiles.map(t => ({ char: t.char, revealed: t.revealed, pointValue: t.pointValue || 0 })),
+      // Unrevealed letters stay on the host — guests only ever see '?' for them,
+      // so a devtools peek can't leak anyone's secret word mid-game.
+      tiles: p.tiles.map(t => ({ char: t.revealed ? t.char : null, revealed: t.revealed, pointValue: t.pointValue || 0 })),
       wrongGuesses: [...p.wrongGuesses]
     })),
     currentTurn, currentRound, gameMode, charCount, rounds, gameActive: true, lastMove, gamePhase,
@@ -1341,8 +1402,55 @@ function renderLobby() {
   }
 }
 
+// Host-only game settings shown in the lobby, so a rematch (or a change of
+// heart while friends join) doesn't require recreating the game.
+function selectLobbyMode(m) {
+  gameMode = m;
+  document.getElementById('lmode-last').classList.toggle('selected', m==='last');
+  document.getElementById('lmode-last').setAttribute('aria-checked', m==='last');
+  document.getElementById('lmode-points').classList.toggle('selected', m==='points');
+  document.getElementById('lmode-points').setAttribute('aria-checked', m==='points');
+  document.getElementById('l-points-options').style.display = m==='points'?'block':'none';
+}
+
+function syncLobbySettings() {
+  const ls = document.getElementById('lobby-settings');
+  if (!ls) return;
+  ls.style.display = isHost ? 'block' : 'none';
+  if (!isHost) return;
+  document.getElementById('l-char-count').value = charCount;
+  document.getElementById('l-rounds').value = rounds;
+  selectLobbyMode(gameMode);
+}
+
+function copyInviteLink() {
+  const url = location.origin + location.pathname + '?join=' + gameCode;
+  const btn = document.getElementById('copy-invite-btn');
+  const done = () => {
+    if (!btn) return;
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  };
+  const fallback = () => {
+    const ta = document.createElement('textarea');
+    ta.value = url; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); done(); } catch(e) {}
+    document.body.removeChild(ta);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(done).catch(fallback);
+  } else fallback();
+}
+
 function hostStartGame() {
   if (!isHost || players.length < 2) return;
+  const ls = document.getElementById('lobby-settings');
+  if (ls && ls.style.display !== 'none') {
+    charCount = clampInt(document.getElementById('l-char-count').value, 4, 30, 10);
+    rounds    = clampInt(document.getElementById('l-rounds').value, 1, 20, 5);
+  }
   const startMsg = { type: 'start', charCount, rounds, gameMode, players: players.map(p => p.name) };
   broadcastToAll(startMsg);
   wordsIn = 0; currentRound = 0;
@@ -1439,6 +1547,8 @@ async function submitWord() {
     players[currentEntryIndex].tiles = padded.split('').map(ch => ({ char: ch, revealed: false }));
     assignTilePoints(players[currentEntryIndex].tiles);
     currentEntryIndex++;
+    // Skip players whose word is already set (the bot picks its own)
+    while (currentEntryIndex < players.length && players[currentEntryIndex].tiles.length) currentEntryIndex++;
     if (currentEntryIndex < players.length) showLocalEntry();
     else beginPlay();
   }
@@ -1562,6 +1672,13 @@ function renderPlay() {
   renderLetterGrid();
   document.getElementById('feedback').textContent = '';
   document.getElementById('feedback').className = 'feedback';
+
+  // Bot turns: lock the panel and let JabBot think for a beat
+  if (botMode && !isOnline && players[ai].isBot) {
+    document.getElementById('action-panel').classList.add('locked');
+    if (botTimer) clearTimeout(botTimer);
+    botTimer = setTimeout(botMove, 1100);
+  }
 }
 
 function renderTargets() {
@@ -1581,7 +1698,7 @@ function renderLetterGrid() {
     const t = players[selectedTarget];
     letters.forEach(l => {
       const lo = l.toLowerCase();
-      if (t.tiles.some(ti => ti.char.toLowerCase()===lo && ti.revealed)) correct.add(l);
+      if (t.tiles.some(ti => ti.revealed && ti.char && ti.char.toLowerCase()===lo)) correct.add(l);
       else if (t.wrongGuesses && t.wrongGuesses.has(lo)) wrong.add(l);
     });
   }
@@ -1603,8 +1720,8 @@ function renderLetterGrid() {
 }
 
 function makeGuess() {
-  if (selectedTarget === null) { setFeedback('Pick a target first.','info'); return; }
-  if (selectedLetter === null) { setFeedback('Pick a letter or blank.','info'); return; }
+  if (selectedTarget == null) { setFeedback('Pick a target first.','info'); return; }
+  if (selectedLetter == null) { setFeedback('Pick a letter or blank.','info'); return; }
   if (isOnline && !isHost) {
     publish({ type:'guess', guesserIdx:myIndex, targetIdx:selectedTarget, letter:selectedLetter });
     selectedLetter = null; renderLetterGrid(); return;
@@ -1833,12 +1950,24 @@ function applySpin(overrideOrder) {
 }
 
 // ── Round / end logic ─────────────────────────────────────────────────────────
+// Game-over carries the full boards so guests (whose mid-game state has
+// unrevealed letters redacted) can show everyone's words on the results screen.
+function broadcastGameOver() {
+  broadcastToAll({
+    type: 'game-over',
+    reveal: players.map(p => ({
+      name: p.name,
+      tiles: p.tiles.map(t => ({ char: t.char, revealed: t.revealed, pointValue: t.pointValue || 0 }))
+    }))
+  });
+}
+
 function checkRoundEnd() {
   const alive = players.filter(p => !p.eliminated);
   if (gameMode === 'last') {
     if (alive.length <= 1) {
       if (renderPlayTimer) { clearTimeout(renderPlayTimer); renderPlayTimer = null; }
-      if (isOnline && isHost) broadcastToAll({ type: 'game-over' });
+      if (isOnline && isHost) broadcastGameOver();
       setTimeout(showResults, 1200);
     }
     return;
@@ -1850,7 +1979,7 @@ function checkRoundEnd() {
   // If we've completed all rounds, show final results
   if (currentRound >= rounds) {
     setFeedback('Game over!', 'info');
-    if (isOnline && isHost) broadcastToAll({ type: 'game-over' });
+    if (isOnline && isHost) broadcastGameOver();
     setTimeout(showResults, 1500);
     return;
   }
@@ -1900,11 +2029,10 @@ function showBetweenRounds() {
         const sp = tile.char === ' ';
         if (tile.revealed) {
           el.className = sp ? 'tile blank-revealed' : 'tile revealed';
-          el.textContent = sp ? '·' : tile.char.toUpperCase();
         } else {
-          el.className = sp ? 'tile exposed' : 'tile exposed';
-          el.textContent = sp ? '·' : tile.char.toUpperCase();
+          el.className = 'tile exposed';
         }
+        el.textContent = sp ? '·' : (tile.char ? tile.char.toUpperCase() : '?');
         tilesDiv.appendChild(el);
       });
       row.appendChild(tilesDiv);
@@ -1983,10 +2111,18 @@ function showResults() {
   showScreen('screen-results');
   try { saveGameResult(); } catch(e) {}
   renderDonateButtons();
+  // Rematch is driven by the host (or either player locally); guests wait
+  document.getElementById('rematch-btn').style.display = (!isOnline || isHost) ? 'block' : 'none';
+  document.getElementById('results-guest-msg').style.display = (isOnline && !isHost) ? 'block' : 'none';
+  const resultsChat = document.getElementById('results-chat');
+  resultsChat.style.display = isOnline ? 'block' : 'none';
+  const rcm = document.getElementById('results-chat-messages');
+  if (rcm) setTimeout(() => { rcm.scrollTop = rcm.scrollHeight; }, 50);
   const sorted = [...players].sort((a,b) =>
     gameMode==='points' ? b.score-a.score :
     (!a.eliminated&&b.eliminated?-1:a.eliminated&&!b.eliminated?1:0));
-  document.getElementById('winner-text').textContent = sorted[0].name + ' wins!';
+  document.getElementById('winner-text').textContent =
+    sorted[0].name === 'You' ? 'You win!' : sorted[0].name + ' wins!';
   document.getElementById('result-sub').textContent =
     gameMode==='points' ? 'Points mode final scores' : 'Last player standing';
   const t = document.getElementById('scoreboard');
@@ -2015,7 +2151,7 @@ function showResults() {
       const el = document.createElement('div');
       const sp = t.char === ' ';
       el.className = sp ? 'tile blank-revealed' : 'tile revealed';
-      el.textContent = sp ? '·' : t.char.toUpperCase();
+      el.textContent = sp ? '·' : (t.char ? t.char.toUpperCase() : '?');
       tc.appendChild(el);
     });
   });
@@ -2025,12 +2161,105 @@ function playAgain() {
   showGameCodeBanner('');
   stopHeartbeats();
   _resultSaved = false;
+  botMode = false;
+  if (botTimer) { clearTimeout(botTimer); botTimer = null; }
   setTimeout(renderRecentFeed, 100);
   if (ablyClient) { try { ablyClient.close(); } catch(e) {} ablyClient=null; gameChannel=null; }
   players=[]; currentEntryIndex=0; currentTurn=0; currentRound=0;
   selectedTarget=null; selectedLetter=null;
   isOnline=false; isHost=false; myName=''; myIndex=-1; gameCode=''; wordsIn=0;
   showScreen('screen-home');
+}
+
+// ── Rematch — same lobby, same code, chat intact ──────────────────────────────
+function resetForRematch() {
+  _resultSaved = false;
+  lastMove = null; currentTurn = 0; currentRound = 0; wordsIn = 0;
+  selectedTarget = null; selectedLetter = null;
+  if (renderPlayTimer) { clearTimeout(renderPlayTimer); renderPlayTimer = null; }
+  players.forEach(p => { p.score = 0; p.eliminated = false; p.word = ''; p.tiles = []; p.wrongGuesses = new Set(); });
+}
+
+function rematchGame() {
+  resetForRematch();
+  if (isOnline) {
+    if (!isHost) return;
+    broadcastToAll({ type: 'rematch' });
+    enterRematchLobby();
+  } else {
+    players.filter(p => p.isBot).forEach(p => assignBotWord(p));
+    currentEntryIndex = 0;
+    while (currentEntryIndex < players.length && players[currentEntryIndex].tiles.length) currentEntryIndex++;
+    if (currentEntryIndex < players.length) showLocalEntry();
+    else beginPlay();
+  }
+}
+
+function enterRematchLobby() {
+  gamePhase = 'lobby';
+  renderLobby();
+  showScreen('screen-lobby');
+  document.getElementById('lobby-chat').style.display = 'block';
+  syncLobbySettings();
+  if (isHost) {
+    document.getElementById('lobby-waiting-msg').style.display = 'none';
+    document.getElementById('lobby-start-row').style.display = players.length >= 2 ? 'flex' : 'none';
+  } else {
+    document.getElementById('lobby-start-row').style.display = 'none';
+    document.getElementById('lobby-waiting-msg').style.display = 'block';
+  }
+  const chatEl = document.getElementById('lobby-chat-messages');
+  if (chatEl) setTimeout(() => { chatEl.scrollTop = chatEl.scrollHeight; }, 50);
+}
+
+// ── Practice vs the bot ───────────────────────────────────────────────────────
+let botMode = false, botTimer = null;
+
+function assignBotWord(p) {
+  const candidates = DAILY_WORDS.filter(w => w.length <= charCount);
+  const word = candidates[Math.floor(Math.random() * candidates.length)].toLowerCase();
+  const padded = word.padEnd(charCount, ' ');
+  p.word = padded;
+  p.tiles = padded.split('').map(ch => ({ char: ch, revealed: false }));
+  assignTilePoints(p.tiles);
+}
+
+function startBotGame() {
+  isOnline = false; isHost = false; botMode = true;
+  gameMode = 'last'; charCount = 10;
+  players = [mkPlayer('You', 0), mkPlayer('JabBot', 1)];
+  players[1].isBot = true;
+  assignBotWord(players[1]);
+  currentEntryIndex = 0; currentRound = 0; currentTurn = 0;
+  _resultSaved = false;
+  showLocalEntry();
+}
+
+function botMove() {
+  botTimer = null;
+  if (!botMode || gamePhase !== 'play') return;
+  const ai = activeIdx();
+  const bot = players[ai];
+  if (!bot || !bot.isBot || bot.eliminated) return;
+  const ti = players.findIndex((p, i) => i !== ai && !p.eliminated);
+  if (ti === -1) return;
+  const target = players[ti];
+  const missed = ch => target.wrongGuesses && target.wrongGuesses.has(ch);
+  const hasRevealed = ch => target.tiles.some(t => t.revealed && t.char && t.char.toLowerCase() === ch);
+  // English letter frequency, with the blank slotted in early since padded
+  // boards almost always contain trailing spaces.
+  const order = 'etaoins rhdlucmfwypvbgkjqxz'.split('');
+  // Try new letters first; once those run out, re-throw letters that already
+  // hit — duplicates (and extra blanks) may still be hiding.
+  const fresh = order.filter(ch => !missed(ch) && !hasRevealed(ch));
+  const repeats = order.filter(ch => !missed(ch) && hasRevealed(ch));
+  const pool = fresh.length ? fresh : repeats;
+  if (pool.length === 0) return;
+  // Mostly plays the best letter, sometimes a weaker one — beatable, not perfect.
+  const pick = Math.random() < 0.7 ? pool[0]
+    : pool[Math.floor(Math.random() * Math.min(pool.length, Math.ceil(pool.length / 2)))];
+  selectedTarget = ti; selectedLetter = null;
+  processGuess(ai, ti, pick);
 }
 
 
@@ -2133,14 +2362,14 @@ function sfx(id) {
 
 // ── Chat ──────────────────────────────────────────────────────────────────────
 function showChat() {
-  ['lobby-chat-messages','play-chat-messages','br-chat-messages'].forEach(id => { const el = document.getElementById(id); if(el) el.innerHTML=''; });
+  ['lobby-chat-messages','play-chat-messages','br-chat-messages','results-chat-messages'].forEach(id => { const el = document.getElementById(id); if(el) el.innerHTML=''; });
   document.getElementById('lobby-chat').style.display = 'block';
   document.getElementById('play-chat').style.display = 'block';
   document.getElementById('br-chat').style.display = 'none';
 }
 
 function sendChat(context) {
-  const inputId = context === 'lobby' ? 'lobby-chat-input' : context === 'br' ? 'br-chat-input' : 'play-chat-input';
+  const inputId = context === 'lobby' ? 'lobby-chat-input' : context === 'br' ? 'br-chat-input' : context === 'results' ? 'results-chat-input' : 'play-chat-input';
   const input = document.getElementById(inputId);
   const text = input.value.trim();
   if (!text) return;
@@ -2155,7 +2384,7 @@ function sendChat(context) {
 }
 
 function appendChat(name, text, isSystem) {
-  const ids = ['lobby-chat-messages', 'play-chat-messages', 'br-chat-messages'];
+  const ids = ['lobby-chat-messages', 'play-chat-messages', 'br-chat-messages', 'results-chat-messages'];
   ids.forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -2307,7 +2536,7 @@ function saveGameResult() {
     players: players.map(p => p.name), totalGuesses: currentTurn, ts: Date.now()
   };
   saveLocalGame(entry);
-  saveSharedResult(entry);
+  if (!botMode) saveSharedResult(entry); // practice games stay off the global board
 }
 
 async function saveSharedResult(entry) {
@@ -2461,7 +2690,20 @@ const DAILY_WORDS = ['JACKPOT','TAVERN','HUSTLE','BANTER','RACKET','SHUFFLE','GU
   'ISLAND','JOURNEY','KEYBOARD','LANTERN','MOUNTAIN','NOTEBOOK','ORCHARD','PANCAKE','RAINBOW','SANDWICH',
   'TELESCOPE','UMBRELLA','VOLCANO','WHISPER','BLANKET','CARNIVAL','DESKTOP','ENVELOPE','FIREFLY','GARDEN',
   'HORIZON','IGLOO','JUNGLE','KETTLE','LAUNDRY','MARBLE','NEEDLE','OYSTER','PRETZEL','QUARTZ',
-  'RIBBON','SUNSET','THUNDER','VELVET','WALNUT'];
+  'RIBBON','SUNSET','THUNDER','VELVET','WALNUT',
+  'ANCHOR','BALLAD','CANYON','DOLPHIN','EMBER','FALCON','GLACIER','HAMMOCK','INKWELL','JIGSAW',
+  'KAYAK','LAGOON','MEADOW','NUTMEG','OCTOPUS','PADDLE','QUIVER','RASCAL','SADDLE','TANGO',
+  'UKULELE','VOYAGE','WAFFLE','YONDER','ZEPHYR','ACROBAT','BONFIRE','CACTUS','DRIZZLE','EQUATOR',
+  'FLANNEL','GONDOLA','HAYSTACK','ICEBERG','JAMBOREE','KINDLING','LULLABY','MUSTANG','NOODLE','OBELISK',
+  'PARLOR','QUICKSAND','ROOSTER','SUITCASE','TWILIGHT','UTENSIL','VERANDA','WILDCAT','ANTLER','BLIZZARD',
+  'COMPASS','DYNAMO','ECLIPSE','FORTRESS','GRIDDLE','HALIBUT','IMPULSE','JAVELIN','KEEPSAKE','LOBSTER',
+  'MOSAIC','NECTAR','OUTPOST','PUZZLE','QUARREL','RIVERBED','SATCHEL','TREADMILL','UPSTREAM','VULTURE',
+  'WHIRLPOOL','ALMANAC','BUFFALO','CHIMNEY','DAYBREAK','EMERALD','FLAMINGO','GAZEBO','HONEYDEW','INFERNO',
+  'JUKEBOX','KETCHUP','LIMERICK','MONSOON','NIGHTCAP','OVERPASS','PORTRAIT','QUOTIENT','RAWHIDE','SNORKEL',
+  'TREACLE','UNICORN','VARNISH','WISTERIA','AVOCADO','BAGPIPE','CATAPULT','DOMINO','ESPRESSO','FOGHORN',
+  'GARLAND','HAMMER','ICICLE','JACKAL','KESTREL','LOZENGE','MAGNET','NARWHAL','OATMEAL','PENGUIN',
+  'RHUBARB','SCOOTER','TUGBOAT','UPROAR','VELCRO','WIGWAM','BAZAAR','CINDER','DAFFODIL','FRECKLE',
+  'GUMDROP','HOLSTER','JAWBONE','LADLE','MITTEN','NUGGET','ORBIT','PLUME','SPROCKET','TINSEL'];
 const DAILY_KEY = 'wj_daily_v1';
 const DAILY_ROUNDS = 6;
 
@@ -2696,6 +2938,26 @@ function shareDailyResult() {
 addPlayer('Player 1'); addPlayer('Player 2'); addPlayer('Player 3');
 initLeaderboard();
 renderDailyHomeBadge();
+
+// Invite deep link — wordjab.io/?join=CODE lands straight on the join screen
+(function () {
+  try {
+    const code = new URLSearchParams(location.search).get('join');
+    if (code && /^[a-zA-Z]{4}$/.test(code)) {
+      document.getElementById('join-code').value = code.toUpperCase();
+      showScreen('screen-join');
+      history.replaceState(null, '', location.pathname);
+      setTimeout(() => document.getElementById('join-name').focus(), 120);
+    }
+  } catch(e) {}
+})();
+
+// PWA offline support (Daily Jab works offline; https only so local dev is unaffected)
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
 </script>
 </body>
 </html>
