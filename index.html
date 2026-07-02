@@ -764,7 +764,7 @@
   <div class="last-move-banner" id="last-move-banner" aria-live="polite" style="display:none;"></div>
   <div id="boards"></div>
   <div class="action-panel" id="action-panel">
-    <h3>Pick who to jab</h3>
+    <h3 id="target-heading">Pick who to jab</h3>
     <div class="target-buttons" id="targets"></div>
     <h3>Throw a letter (or a blank)</h3>
     <div class="letter-grid" id="letters"></div>
@@ -1660,15 +1660,27 @@ function renderPlay() {
   document.getElementById('action-panel').classList.toggle('locked', isOnline && !isMyTurn());
 
   const tb = document.getElementById('targets');
+  const th = document.getElementById('target-heading');
   tb.innerHTML = '';
-  players.forEach((p, i) => {
-    if (i === ai || p.eliminated) return;
-    const b = document.createElement('button');
-    b.className = 'target-btn' + (selectedTarget===i?' selected':'');
-    b.textContent = p.name;
-    b.onclick = () => { selectedTarget = i; renderLetterGrid(); renderTargets(); };
-    tb.appendChild(b);
-  });
+  const eligible = [];
+  players.forEach((p, i) => { if (i !== ai && !p.eliminated) eligible.push(i); });
+  if (eligible.length === 1) {
+    // Only one opponent left (2-player game or endgame) — no choice to make
+    selectedTarget = eligible[0];
+    th.textContent = 'Jabbing ' + players[selectedTarget].name;
+    tb.style.display = 'none';
+  } else {
+    th.textContent = 'Pick who to jab';
+    tb.style.display = 'flex';
+    eligible.forEach(i => {
+      const p = players[i];
+      const b = document.createElement('button');
+      b.className = 'target-btn' + (selectedTarget===i?' selected':'');
+      b.textContent = p.name;
+      b.onclick = () => { selectedTarget = i; renderLetterGrid(); renderTargets(); };
+      tb.appendChild(b);
+    });
+  }
 
   renderLetterGrid();
   document.getElementById('feedback').textContent = '';
