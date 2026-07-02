@@ -560,7 +560,7 @@
     <ol class="how-steps">
       <li><strong>Host a game</strong> and share the 4-letter code, or gather around one screen with pass-and-play.</li>
       <li><strong>Pick your secret word</strong> — a real word or phrase up to the character limit. Nobody else can see it.</li>
-      <li><strong>Take turns jabbing.</strong> Pick an opponent, throw a letter. A hit reveals a matching tile and you jab again; a miss passes the turn.</li>
+      <li><strong>Take turns jabbing.</strong> Pick an opponent, throw a letter. A hit reveals every matching tile and you jab again; a miss passes the turn.</li>
       <li><strong>Win the fight.</strong> In Last Standing, survive with your word uncracked. In Points mode, score for every hit and cracked board.</li>
     </ol>
     <p>Too busy for a full bout? The <strong>Daily Jab</strong> gives you one word and six jabs every day — keep your streak alive and share your result.</p>
@@ -1642,7 +1642,8 @@ function renderPlay() {
     p.tiles.forEach((t, ti) => {
       const el = document.createElement('div');
       const sp = t.char === ' ';
-      const isLastTile = lastMove && lastMove.targetIdx === i && lastMove.tileIdx === ti;
+      const isLastTile = lastMove && lastMove.targetIdx === i &&
+        Array.isArray(lastMove.tileIdxs) && lastMove.tileIdxs.includes(ti);
       if (t.revealed) {
         let cls = sp ? 'tile blank-revealed' : 'tile revealed';
         if (isLastTile && lastMove.result === 'correct') cls = 'tile just-revealed';
@@ -1706,7 +1707,8 @@ function renderLetterGrid() {
     const b = document.createElement('button');
     b.className = 'letter-btn';
     b.textContent = l;
-    if (correct.has(l)) b.className += ' used-correct';
+    // Hits reveal every matching tile, so a correct letter is spent too
+    if (correct.has(l)) { b.className += ' used-correct'; b.disabled = true; }
     else if (wrong.has(l)) { b.className += ' used-wrong'; b.disabled = true; }
     else if (selectedLetter === l) b.className += ' selected';
     b.onclick = () => { if (b.disabled) return; selectedLetter = selectedLetter===l?null:l; renderLetterGrid(); };
@@ -1715,7 +1717,13 @@ function renderLetterGrid() {
   const bb = document.createElement('button');
   bb.className = 'blank-btn' + (selectedLetter===' '?' selected':'');
   bb.textContent = 'SPACE / BLANK';
-  bb.onclick = () => { selectedLetter = selectedLetter===' '?null:' '; renderLetterGrid(); };
+  if (selectedTarget !== null) {
+    const t = players[selectedTarget];
+    const blankSpent = t.tiles.some(ti => ti.revealed && ti.char === ' ') ||
+      (t.wrongGuesses && t.wrongGuesses.has(' '));
+    if (blankSpent) { bb.disabled = true; bb.classList.remove('selected'); }
+  }
+  bb.onclick = () => { if (bb.disabled) return; selectedLetter = selectedLetter===' '?null:' '; renderLetterGrid(); };
   lg.appendChild(bb);
 }
 
@@ -1757,28 +1765,38 @@ function processGuess(gi, ti, letter) {
   const target = players[ti];
   const lc = letter.toLowerCase();
   if (!target.wrongGuesses) target.wrongGuesses = new Set();
-  const tileIdx = target.tiles.findIndex(t => !t.revealed && t.char.toLowerCase()===lc);
+  // A hit reveals every matching tile (same rule as the Daily Jab)
+  const hitIdxs = [];
+  target.tiles.forEach((t, i) => {
+    if (!t.revealed && t.char && t.char.toLowerCase() === lc) hitIdxs.push(i);
+  });
 
-  if (tileIdx !== -1) {
-    const tile = target.tiles[tileIdx];
-    tile.revealed = true;
-    const pts = (gameMode === 'points') ? (tile.pointValue || 5) : 0;
+  if (hitIdxs.length > 0) {
+    let pts = 0;
+    hitIdxs.forEach(i => {
+      target.tiles[i].revealed = true;
+      if (gameMode === 'points') pts += (target.tiles[i].pointValue || 5);
+    });
     if (gameMode === 'points') players[gi].score += pts;
+    const label = letter === ' ' ? 'space' : letter.toUpperCase();
     if (target.tiles.every(t => t.revealed)) {
       if (gameMode === 'points') players[gi].score += 30;
       target.eliminated = true;
       _pendingSound = 'cracked';
       sfx('cracked'); setTimeout(() => sfx('eliminated'), 500);
       const totalPts = pts + 30;
-      lastMove = { guesser: players[gi].name, guesserColor: players[gi].color, targetIdx: ti, tileIdx, letter, result: 'correct', pts: totalPts, cracked: true };
+      lastMove = { guesser: players[gi].name, guesserColor: players[gi].color, targetIdx: ti, tileIdxs: hitIdxs, letter, result: 'correct', pts: totalPts, cracked: true };
       setFeedback(target.name+"'s board cracked!" + (gameMode==='points' ? ' +'+totalPts+' pts' : ''), 'correct');
       if (isOnline && isHost) broadcastState();
       checkRoundEnd();
     } else {
       _pendingSound = 'correct';
       sfx('correct');
-      lastMove = { guesser: players[gi].name, guesserColor: players[gi].color, targetIdx: ti, tileIdx, letter, result: 'correct', pts, cracked: false };
-      setFeedback('Correct!' + (gameMode==='points' ? ' +'+pts+' pts' : ' A "' + (letter===' '?'space':letter.toUpperCase()) + '" revealed.'), 'correct');
+      lastMove = { guesser: players[gi].name, guesserColor: players[gi].color, targetIdx: ti, tileIdxs: hitIdxs, letter, result: 'correct', pts, cracked: false };
+      const revealNote = hitIdxs.length > 1
+        ? ' ' + hitIdxs.length + ' × "' + label + '" revealed.'
+        : ' A "' + label + '" revealed.';
+      setFeedback('Correct!' + (gameMode==='points' ? ' +'+pts+' pts' : revealNote), 'correct');
       if (isOnline && isHost) broadcastState();
     }
     selectedLetter = null;
@@ -1787,7 +1805,7 @@ function processGuess(gi, ti, letter) {
     target.wrongGuesses.add(lc);
     _pendingSound = 'wrong';
     sfx('wrong');
-    lastMove = { guesser: players[gi].name, guesserColor: players[gi].color, targetIdx: ti, tileIdx: -1, letter, result: 'wrong', pts: 0, cracked: false };
+    lastMove = { guesser: players[gi].name, guesserColor: players[gi].color, targetIdx: ti, tileIdxs: [], letter, result: 'wrong', pts: 0, cracked: false };
     setFeedback('Nope! No "' + (letter===' '?'space':letter.toUpperCase()) + '" there.', 'wrong');
     selectedLetter = null;
     setTimeout(() => {
@@ -2247,13 +2265,10 @@ function botMove() {
   const missed = ch => target.wrongGuesses && target.wrongGuesses.has(ch);
   const hasRevealed = ch => target.tiles.some(t => t.revealed && t.char && t.char.toLowerCase() === ch);
   // English letter frequency, with the blank slotted in early since padded
-  // boards almost always contain trailing spaces.
+  // boards almost always contain trailing spaces. Hits reveal every matching
+  // tile, so anything already revealed or missed is spent.
   const order = 'etaoins rhdlucmfwypvbgkjqxz'.split('');
-  // Try new letters first; once those run out, re-throw letters that already
-  // hit — duplicates (and extra blanks) may still be hiding.
-  const fresh = order.filter(ch => !missed(ch) && !hasRevealed(ch));
-  const repeats = order.filter(ch => !missed(ch) && hasRevealed(ch));
-  const pool = fresh.length ? fresh : repeats;
+  const pool = order.filter(ch => !missed(ch) && !hasRevealed(ch));
   if (pool.length === 0) return;
   // Mostly plays the best letter, sometimes a weaker one — beatable, not perfect.
   const pick = Math.random() < 0.7 ? pool[0]
