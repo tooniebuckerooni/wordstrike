@@ -16,38 +16,82 @@
 <meta name="robots" content="index, follow">
 <meta name="theme-color" content="#150f22">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23150f22'/><text x='50' y='68' font-size='58' text-anchor='middle'>🥊</text></svg>">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
 <meta property="og:type" content="website">
+<meta property="og:site_name" content="WordJab">
+<meta property="og:locale" content="en_US">
 <meta property="og:title" content="WordJab — Multiplayer Word Battle Game">
 <meta property="og:description" content="Guess letters. Crack your opponents' secret words. Be the last one standing. Free multiplayer word game — no download, no sign-up.">
-<meta property="og:url" content="https://wordjab.io">
+<meta property="og:url" content="https://wordjab.io/">
 <meta property="og:image" content="https://wordjab.io/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="WordJab logo — a boxing glove and the tagline 'guess, jab, win'">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="WordJab — Multiplayer Word Battle Game">
 <meta name="twitter:description" content="Free multiplayer word battle game. Play online with friends using a 4-letter code.">
 <meta name="twitter:image" content="https://wordjab.io/og-image.png">
-<link rel="canonical" href="https://wordjab.io">
+<link rel="canonical" href="https://wordjab.io/">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "WebApplication",
   "name": "WordJab",
-  "url": "https://wordjab.io",
+  "url": "https://wordjab.io/",
   "description": "Free multiplayer word battle game. Guess letters to crack your opponents' secret words. Play online with friends using a 4-letter code.",
   "applicationCategory": "GameApplication",
   "genre": "Word Game",
   "operatingSystem": "Any",
+  "browserRequirements": "Requires JavaScript",
+  "image": "https://wordjab.io/og-image.png",
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
   "author": { "@type": "Organization", "name": "WordJab" }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Is WordJab free to play?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. WordJab is completely free — no download, no sign-up, no account. Open wordjab.io in any browser and start playing." }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I play WordJab with friends online?",
+      "acceptedAnswer": { "@type": "Answer", "text": "One player hosts a game and gets a 4-letter code. Everyone else opens wordjab.io, taps Join a game, and enters the code. Each player picks a secret word, then you take turns guessing letters on each other's boards." }
+    },
+    {
+      "@type": "Question",
+      "name": "How many players can play WordJab?",
+      "acceptedAnswer": { "@type": "Answer", "text": "WordJab works with 2 or more players, online with a game code or pass-and-play on a single device. It shines as a party game with 3 to 6 players." }
+    },
+    {
+      "@type": "Question",
+      "name": "What is the Daily Jab?",
+      "acceptedAnswer": { "@type": "Answer", "text": "The Daily Jab is a free solo challenge: one secret word, six wrong guesses allowed, one new word every day. Keep your streak alive and share your result with friends." }
+    },
+    {
+      "@type": "Question",
+      "name": "Do I need to install an app to play WordJab?",
+      "acceptedAnswer": { "@type": "Answer", "text": "No. WordJab runs entirely in your web browser on phones, tablets, and computers. You can add it to your home screen for an app-like experience." }
+    }
+  ]
 }
 </script>
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WordJab — Multiplayer Word Battle Game</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="dns-prefetch" href="https://cdn.ably.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 
-  @import url('https://fonts.googleapis.com/css2?family=Anton&family=Work+Sans:wght@400;500;600;700&display=swap');
   :root {
     --ink: #150f22;
     --inset: #110a1d;
@@ -403,9 +447,50 @@
   .streak-box .num { font-family: 'Anton', sans-serif; font-size: 1.8rem; color: var(--paper); }
   .streak-box .lbl { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
 
+  .info-section { margin-top: 1rem; }
+  .info-section h2 {
+    font-family: 'Anton', sans-serif; font-size: 0.95rem; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--muted-2); margin-bottom: 0.6rem;
+  }
+  .info-section p { font-size: 0.82rem; color: var(--muted); line-height: 1.55; margin-bottom: 0.6rem; }
+  .info-section strong { color: var(--muted-2); font-weight: 600; }
+  .how-steps { list-style: none; counter-reset: step; }
+  .how-steps li {
+    counter-increment: step; font-size: 0.82rem; color: var(--muted); line-height: 1.5;
+    padding: 0.35rem 0 0.35rem 2rem; position: relative;
+  }
+  .how-steps li::before {
+    content: counter(step); position: absolute; left: 0; top: 0.35rem;
+    width: 20px; height: 20px; border-radius: 50%; background: var(--jab-tint);
+    color: var(--jab-soft); font-size: 0.7rem; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .faq-item { border-bottom: 0.5px solid var(--line); padding: 0.55rem 0; }
+  .faq-item:last-child { border-bottom: none; }
+  .faq-item h3 { font-size: 0.84rem; color: var(--paper); font-weight: 600; margin-bottom: 0.25rem; }
+  .faq-item p { font-size: 0.8rem; color: var(--muted); line-height: 1.5; margin: 0; }
+  .support-card {
+    background: var(--inset); border: 1px dashed var(--line); border-radius: 12px;
+    padding: 1rem 1.1rem; margin-top: 0.75rem;
+  }
+  .support-card h3 { font-size: 0.84rem; color: var(--jab-soft); font-weight: 600; margin-bottom: 0.3rem; }
+  .support-card p { font-size: 0.78rem; color: var(--muted); line-height: 1.5; margin-bottom: 0.5rem; }
+  .support-card a { color: var(--jab); text-decoration: none; }
+  .support-card a:hover { text-decoration: underline; }
+  .site-footer {
+    text-align: center; font-size: 0.7rem; color: var(--muted);
+    padding: 1.25rem 1rem 2rem; line-height: 1.7;
+  }
+  .site-footer a { color: var(--muted-2); text-decoration: none; }
+  .site-footer a:hover { color: var(--jab-soft); }
+
 </style>
 </head>
 <body>
+
+<noscript>
+  <p style="text-align:center;padding:1rem;color:#efe9f7;">WordJab is a free multiplayer word battle game — guess letters, crack your opponents' secret words, and be the last one standing. It needs JavaScript to run; please enable it and reload.</p>
+</noscript>
 
 <h1 class="wordjab-logo">
   <span class="logo-word">Word</span><span class="logo-jab">Jab</span>
@@ -459,10 +544,56 @@
     </div>
   </div>
   <div class="donate-strip" id="home-donate-strip" style="display:none;">
-    <a id="home-donate-btn" class="donate-btn" href="#" target="_blank">
+    <a id="home-donate-btn" class="donate-btn" href="#" target="_blank" rel="noopener">
       <span class="beer" aria-hidden="true">🍺</span> buy the dev a beer
     </a>
   </div>
+
+  <div class="card info-section">
+    <h2>How to play WordJab</h2>
+    <p>WordJab is a <strong>free multiplayer word battle game</strong> — part hangman, part knockout round. Every player hides a secret word, then you take turns throwing letters at each other's boards. Guess right and you keep jabbing; crack someone's whole word and they're out.</p>
+    <ol class="how-steps">
+      <li><strong>Host a game</strong> and share the 4-letter code, or gather around one screen with pass-and-play.</li>
+      <li><strong>Pick your secret word</strong> — a real word or phrase up to the character limit. Nobody else can see it.</li>
+      <li><strong>Take turns jabbing.</strong> Pick an opponent, throw a letter. A hit reveals every matching tile and you go again; a miss passes the turn.</li>
+      <li><strong>Win the fight.</strong> In Last Standing, survive with your word uncracked. In Points mode, score for every hit and cracked board.</li>
+    </ol>
+    <p>Too busy for a full bout? The <strong>Daily Jab</strong> gives you one word and six jabs every day — keep your streak alive and share your result.</p>
+  </div>
+
+  <div class="card info-section">
+    <h2>FAQ</h2>
+    <div class="faq-item">
+      <h3>Is WordJab free to play?</h3>
+      <p>Yes — completely free. No download, no sign-up, no account. Open wordjab.io in any browser and start playing.</p>
+    </div>
+    <div class="faq-item">
+      <h3>How do I play with friends online?</h3>
+      <p>One player hosts and gets a 4-letter code. Everyone else taps <em>Join a game</em> and enters the code. Works on phones, tablets, and computers.</p>
+    </div>
+    <div class="faq-item">
+      <h3>How many players can play?</h3>
+      <p>2 or more — online with a game code or pass-and-play on one device. It shines as a party game with 3 to 6 players.</p>
+    </div>
+    <div class="faq-item">
+      <h3>What is the Daily Jab?</h3>
+      <p>A free solo challenge: one secret word, six wrong guesses allowed, one new word every day. Build a streak and share your score.</p>
+    </div>
+    <div class="faq-item">
+      <h3>Do I need to install an app?</h3>
+      <p>No. WordJab runs entirely in your browser. On mobile you can add it to your home screen for an app-like experience.</p>
+    </div>
+    <div class="support-card">
+      <h3>Keep WordJab free — support or sponsor</h3>
+      <p>WordJab is free for everyone and built by one person. If it made your game night, you can <a id="support-donate-link" href="#" target="_blank" rel="noopener">buy the dev a beer 🍺</a> to help cover server costs.</p>
+      <p><strong>Sponsors:</strong> put your brand in front of players between rounds and on the leaderboard — a friendly spot seen after every match. <a id="sponsor-contact-link" href="#">Get in touch</a> to sponsor WordJab.</p>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <strong>WordJab</strong> — the free multiplayer word battle game. Guess letters, crack secret words, be the last one standing.<br>
+    Play online with friends or pass-and-play on one device · New Daily Jab puzzle every day
+  </footer>
 </div>
 
 <!-- LOCAL SETUP -->
@@ -643,7 +774,7 @@
     <button class="btn-primary" onclick="playAgain()" style="flex:1;">Play again</button>
   </div>
   <div class="donate-results" id="results-donate-strip" style="display:none;">
-    <a id="results-donate-btn" href="#" target="_blank">
+    <a id="results-donate-btn" href="#" target="_blank" rel="noopener">
       <span style="font-size:14px;" aria-hidden="true">🍺</span> enjoyed WordJab? buy the dev a beer · $5
     </a>
   </div>
@@ -795,6 +926,21 @@ function showGameCodeBanner(code) {
   }
 }
 function setErr(id, msg) { document.getElementById(id).textContent = msg; }
+
+// Escape untrusted strings (player names, chat, leaderboard data) before
+// interpolating into innerHTML — everything network- or storage-sourced.
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, ch =>
+    ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch]));
+}
+// Colors travel over the wire too — only allow hex colors through into style="".
+function safeColor(c, fallback) {
+  return /^#[0-9a-fA-F]{3,8}$/.test(String(c || '')) ? c : (fallback || 'var(--muted-2)');
+}
+function clampInt(v, min, max, dflt) {
+  const n = parseInt(v);
+  return isNaN(n) ? dflt : Math.min(max, Math.max(min, n));
+}
 function generateCode() {
   // avoid ambiguous chars O/0 I/1
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -818,14 +964,14 @@ function addPlayer(name='') {
   const idx = list.children.length;
   const div = document.createElement('div');
   div.className = 'player-entry';
-  div.innerHTML = `<input type="text" aria-label="Player ${idx+1} name" placeholder="Player ${idx+1}" value="${name}">
+  div.innerHTML = `<input type="text" aria-label="Player ${idx+1} name" placeholder="Player ${idx+1}" value="${esc(name)}">
     <button class="btn-danger btn-sm" aria-label="Remove player" onclick="this.parentElement.remove()">✕</button>`;
   list.appendChild(div);
 }
 
 function startLocalGame() {
-  charCount = parseInt(document.getElementById('char-count').value)||10;
-  rounds    = parseInt(document.getElementById('rounds').value)||5;
+  charCount = clampInt(document.getElementById('char-count').value, 4, 30, 10);
+  rounds    = clampInt(document.getElementById('rounds').value, 1, 20, 5);
   const names = Array.from(document.querySelectorAll('#player-list .player-entry input'))
     .map((el,i) => el.value.trim()||'Player '+(i+1));
   if (names.length < 2) { alert('Add at least 2 players!'); return; }
@@ -858,8 +1004,8 @@ async function createGame() {
   setErr('online-setup-error','');
   if (!name) { setErr('online-setup-error','Enter your name.'); return; }
 
-  charCount = parseInt(document.getElementById('o-char-count').value)||10;
-  rounds    = parseInt(document.getElementById('o-rounds').value)||5;
+  charCount = clampInt(document.getElementById('o-char-count').value, 4, 30, 10);
+  rounds    = clampInt(document.getElementById('o-rounds').value, 1, 20, 5);
   isOnline = true; isHost = true; myName = name;
   gameCode = generateCode();
 
@@ -1059,7 +1205,9 @@ function onGuestReceive(data) {
   if (data.type === 'chat') {
     // Host relays guest chat to everyone, including the original sender —
     // skip re-appending our own message since we already showed it optimistically.
-    if (data.name !== myName) appendChat(data.name, data.text, false);
+    // '__system__' messages (reconnect notices etc.) render as system lines.
+    if (data.name === '__system__') appendChat('', data.text, true);
+    else if (data.name !== myName) appendChat(data.name, data.text, false);
   }
   if (data.type === 'game-over') {
     showResults();
@@ -1181,8 +1329,8 @@ function renderLobby() {
   players.forEach(p => {
     const div = document.createElement('div');
     div.className = 'lobby-player';
-    div.innerHTML = `<div class="lobby-dot" style="background:${p.color}"></div>
-      <span>${p.name}</span>
+    div.innerHTML = `<div class="lobby-dot" style="background:${safeColor(p.color)}"></div>
+      <span>${esc(p.name)}</span>
       ${p.name === myName ? '<span style="font-size:0.75rem;color:var(--muted);">(you)</span>' : ''}`;
     list.appendChild(div);
   });
@@ -1224,7 +1372,7 @@ function showOnlineEntry() {
 function renderEntryWaiting(doneNames, total) {
   document.getElementById('entry-ready-list').innerHTML = players.map(p =>
     `<div class="ready-row ${doneNames.includes(p.name)?'done':'pending'}">
-      ${doneNames.includes(p.name)?'✓':'○'} ${p.name}
+      ${doneNames.includes(p.name)?'✓':'○'} ${esc(p.name)}
     </div>`
   ).join('');
 }
@@ -1350,18 +1498,18 @@ function renderPlay() {
     const crackedNote = lastMove.cracked ? ' — board cracked!' : '';
     const ptsNote = gameMode === 'points' ? ` +${lastMove.pts} pts` : '';
     if (lastMove.result === 'correct') {
-      lmEl.innerHTML = `<span class="lm-who" style="color:${lastMove.guesserColor}">${lastMove.guesser}</span>
+      lmEl.innerHTML = `<span class="lm-who" style="color:${safeColor(lastMove.guesserColor)}">${esc(lastMove.guesser)}</span>
         <span style="color:var(--muted);">guessed</span>
-        <span style="color:var(--paper);font-weight:500;">${letterLabel}</span>
+        <span style="color:var(--paper);font-weight:500;">${esc(letterLabel)}</span>
         <span style="color:var(--muted);">on</span>
-        <span style="color:${tgt ? tgt.color : 'var(--muted)'};font-weight:500;">${tgt ? tgt.name : '?'}</span>
-        <span class="lm-result-correct">${crackedNote || '— correct'}${ptsNote}</span>`;
+        <span style="color:${tgt ? safeColor(tgt.color) : 'var(--muted)'};font-weight:500;">${tgt ? esc(tgt.name) : '?'}</span>
+        <span class="lm-result-correct">${esc(crackedNote || '— correct')}${esc(ptsNote)}</span>`;
     } else {
-      lmEl.innerHTML = `<span class="lm-who" style="color:${lastMove.guesserColor}">${lastMove.guesser}</span>
+      lmEl.innerHTML = `<span class="lm-who" style="color:${safeColor(lastMove.guesserColor)}">${esc(lastMove.guesser)}</span>
         <span style="color:var(--muted);">guessed</span>
-        <span style="color:var(--paper);font-weight:500;">${letterLabel}</span>
+        <span style="color:var(--paper);font-weight:500;">${esc(letterLabel)}</span>
         <span style="color:var(--muted);">on</span>
-        <span style="color:${tgt ? tgt.color : 'var(--muted)'};font-weight:500;">${tgt ? tgt.name : '?'}</span>
+        <span style="color:${tgt ? safeColor(tgt.color) : 'var(--muted)'};font-weight:500;">${tgt ? esc(tgt.name) : '?'}</span>
         <span class="lm-result-wrong">— not there</span>`;
     }
     lmEl.style.display = 'flex';
@@ -1375,7 +1523,7 @@ function renderPlay() {
     const d = document.createElement('div');
     d.className = 'board';
     d.innerHTML = `<div class="board-header">
-      <div class="board-name" style="color:${p.color}">${p.name}${isOnline&&p.name===myName?' (you)':''}</div>
+      <div class="board-name" style="color:${safeColor(p.color)}">${esc(p.name)}${isOnline&&p.name===myName?' (you)':''}</div>
       <div class="board-status ${p.eliminated?'status-eliminated':'status-alive'}">${p.eliminated?'eliminated':'alive'}</div>
       ${gameMode==='points'?`<div class="board-score">${p.score} pts</div>`:''}
     </div><div class="tiles" id="tiles-${i}"></div>`;
@@ -1726,7 +1874,7 @@ function showBetweenRounds() {
   sorted.forEach((p, i) => {
     const tr = document.createElement('tr');
     if (i === 0) tr.className = 'winner';
-    tr.innerHTML = `<td style="color:${p.color}">${p.name}</td>
+    tr.innerHTML = `<td style="color:${safeColor(p.color)}">${esc(p.name)}</td>
       <td>${p.score} pts</td>
       <td>${p.eliminated ? 'Eliminated' : 'Survived'}</td>`;
     t.appendChild(tr);
@@ -1846,7 +1994,7 @@ function showResults() {
   sorted.forEach((p,i) => {
     const tr = document.createElement('tr');
     if (i===0) tr.className='winner';
-    tr.innerHTML = `<td style="color:${p.color}">${p.name}</td>
+    tr.innerHTML = `<td style="color:${safeColor(p.color)}">${esc(p.name)}</td>
       ${gameMode==='points'?`<td>${p.score} pts</td>`:''}
       <td>${p.eliminated?'Eliminated':'Survived'}</td>`;
     t.appendChild(tr);
@@ -1859,7 +2007,7 @@ function showResults() {
     if (!p.tiles.length) return;
     const row = document.createElement('div');
     row.className = 'board';
-    row.innerHTML = `<div class="board-header"><div class="board-name" style="color:${p.color}">${p.name}</div></div>
+    row.innerHTML = `<div class="board-header"><div class="board-name" style="color:${safeColor(p.color)}">${esc(p.name)}</div></div>
       <div class="tiles"></div>`;
     wordsEl.appendChild(row);
     const tc = row.querySelector('.tiles');
@@ -2018,7 +2166,7 @@ function appendChat(name, text, isSystem) {
     if (isSystem) {
       div.textContent = text;
     } else {
-      div.innerHTML = `<span class="chat-name" style="color:${color}">${name}</span>${text}`;
+      div.innerHTML = `<span class="chat-name" style="color:${safeColor(color)}">${esc(name)}</span>${esc(text)}`;
     }
     el.appendChild(div);
     el.scrollTop = el.scrollHeight;
@@ -2042,6 +2190,14 @@ function renderDonateButtons() {
   if (resultsStrip && resultsBtn) {
     if (url) { resultsBtn.href = url; resultsStrip.style.display = 'block'; }
     else resultsStrip.style.display = 'none';
+  }
+  const supportLink = document.getElementById('support-donate-link');
+  if (supportLink && url) supportLink.href = url;
+  // Sponsor contact — assembled at runtime to keep the address off scraper radars
+  const sponsorLink = document.getElementById('sponsor-contact-link');
+  if (sponsorLink) {
+    const addr = ['dustinramsbottom', 'gmail.com'].join('@');
+    sponsorLink.href = 'mailto:' + addr + '?subject=' + encodeURIComponent('Sponsoring WordJab');
   }
 }
 
@@ -2208,17 +2364,17 @@ function renderRecentFeed() {
         if (sp.img) html += '<img class="sp-img" src="' + sp.img + '" alt="' + (sp.sponsor || 'sponsor') + '">';
         html += '<div class="sp-body"><div class="sp-label">' + spLabel + '</div>';
         html += '<div class="sp-msg">' + sp.msg + '</div>';
-        if (sp.link) html += '<div class="sp-link"><a href="' + sp.link + '" target="_blank">' + (sp.linkText || sp.link) + '</a></div>';
+        if (sp.link) html += '<div class="sp-link"><a href="' + sp.link + '" target="_blank" rel="noopener">' + (sp.linkText || sp.link) + '</a></div>';
         html += '</div></div>';
       }
     }
-    const vs = g.players.filter(n => n !== g.winner).join(', ');
+    const vs = (g.players || []).filter(n => n !== g.winner).join(', ');
     const modeStr = g.mode === 'points' ? 'Points' + (g.rounds ? ' · ' + g.rounds + (g.rounds === 1 ? ' round' : ' rounds') : '') : 'Last Standing';
     html += '<div class="feed-row">';
-    html += '<div class="feed-top"><span class="feed-winner" style="color:' + (g.winnerColor || 'var(--muted-2)') + '">' + g.winner + '</span>';
+    html += '<div class="feed-top"><span class="feed-winner" style="color:' + safeColor(g.winnerColor) + '">' + esc(g.winner) + '</span>';
     html += '<span class="feed-badge">won</span>';
     html += '<span class="feed-date">' + timeAgo(g.ts) + '</span></div>';
-    html += '<div class="feed-sub">vs ' + (vs || 'solo') + ' · ' + modeStr + (g.mode === 'points' && g.score ? ' · ' + g.score + ' pts' : '') + '</div>';
+    html += '<div class="feed-sub">vs ' + esc(vs || 'solo') + ' · ' + modeStr + (g.mode === 'points' && g.score ? ' · ' + esc(g.score) + ' pts' : '') + '</div>';
     html += '</div>';
   });
   el.innerHTML = html;
@@ -2247,9 +2403,9 @@ async function loadSharedLeaderboard() {
     topScores.slice(0, 5).forEach((s, i) => {
       const rl = rankLabels[i] || '';
       html += '<div class="lb-row"><span class="lb-rank ' + rl + '">' + (i+1) + '</span>';
-      html += '<span class="lb-name">' + s.name + '</span>';
-      html += '<span class="lb-detail">' + (s.players ? s.players.length + 'p' : '') + '</span>';
-      html += '<span class="lb-score">' + s.score + ' pts</span></div>';
+      html += '<span class="lb-name">' + esc(s.name) + '</span>';
+      html += '<span class="lb-detail">' + (Array.isArray(s.players) ? s.players.length + 'p' : '') + '</span>';
+      html += '<span class="lb-score">' + esc(s.score) + ' pts</span></div>';
     });
   }
 
@@ -2261,7 +2417,7 @@ async function loadSharedLeaderboard() {
     if (sp.img) html += '<img class="sp-img" src="' + sp.img + '" alt="' + (sp.sponsor || 'sponsor') + '">';
     html += '<div class="sp-body"><div class="sp-label">' + spLabel + '</div>';
     html += '<div class="sp-msg">' + sp.msg + '</div>';
-    if (sp.link) html += '<div class="sp-link"><a href="' + sp.link + '" target="_blank">' + (sp.linkText || sp.link) + '</a></div>';
+    if (sp.link) html += '<div class="sp-link"><a href="' + sp.link + '" target="_blank" rel="noopener">' + (sp.linkText || sp.link) + '</a></div>';
     html += '</div></div>';
   }
 
@@ -2273,9 +2429,9 @@ async function loadSharedLeaderboard() {
   } else {
     longest.slice(0, 5).forEach((g, i) => {
       html += '<div class="lb-row"><span class="lb-rank">' + (i+1) + '</span>';
-      html += '<span class="lb-name" style="color:' + (g.winnerColor || 'var(--muted-2)') + '">' + g.winner + '</span>';
-      html += '<span class="lb-detail">' + (g.players ? g.players.length + 'p' : '') + '</span>';
-      html += '<span class="lb-score">' + g.totalGuesses + ' turns</span></div>';
+      html += '<span class="lb-name" style="color:' + safeColor(g.winnerColor) + '">' + esc(g.winner) + '</span>';
+      html += '<span class="lb-detail">' + (Array.isArray(g.players) ? g.players.length + 'p' : '') + '</span>';
+      html += '<span class="lb-score">' + esc(g.totalGuesses) + ' turns</span></div>';
     });
   }
 
@@ -2288,13 +2444,6 @@ function switchLbTab(tab) {
   document.querySelector('[onclick="switchLbTab(\'' + tab + '\')"]').classList.add('active');
   document.getElementById('lb-panel-' + tab).classList.add('active');
   if (tab === 'shared') loadSharedLeaderboard();
-  if (tab === 'settings') {
-    renderDonateButtons();
-    const jDot = document.getElementById('jsonbin-status-dot');
-    const pDot = document.getElementById('paypal-status-dot');
-    if (jDot) { jDot.textContent = hasJsonBin() ? '● configured' : '○ not configured'; jDot.style.color = hasJsonBin() ? 'var(--jab-soft)' : 'var(--muted)'; }
-    if (pDot) { pDot.textContent = PAYPAL_USERNAME ? '● configured' : '○ not configured'; pDot.style.color = PAYPAL_USERNAME ? 'var(--jab-soft)' : 'var(--muted)'; }
-  }
 }
 
 function initLeaderboard() {
