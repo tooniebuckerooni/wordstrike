@@ -560,7 +560,7 @@
     <ol class="how-steps">
       <li><strong>Host a game</strong> and share the 4-letter code, or gather around one screen with pass-and-play.</li>
       <li><strong>Pick your secret word</strong> — a real word or phrase up to the character limit. Nobody else can see it.</li>
-      <li><strong>Take turns jabbing.</strong> Pick an opponent, throw a letter. A hit reveals every matching tile and you jab again; a miss passes the turn.</li>
+      <li><strong>Take turns jabbing.</strong> Pick an opponent, throw a letter. A hit reveals every matching tile (blanks come one at a time) and you jab again; a miss passes the turn.</li>
       <li><strong>Win the fight.</strong> In Last Standing, survive with your word uncracked. In Points mode, score for every hit and cracked board.</li>
     </ol>
     <p>Too busy for a full bout? The <strong>Daily Jab</strong> gives you one word and six jabs every day — keep your streak alive and share your result.</p>
@@ -1717,11 +1717,11 @@ function renderLetterGrid() {
   const bb = document.createElement('button');
   bb.className = 'blank-btn' + (selectedLetter===' '?' selected':'');
   bb.textContent = 'SPACE / BLANK';
+  // Blanks reveal one at a time, so more may remain behind a revealed space —
+  // only a missed blank guess proves the well is dry.
   if (selectedTarget !== null) {
     const t = players[selectedTarget];
-    const blankSpent = t.tiles.some(ti => ti.revealed && ti.char === ' ') ||
-      (t.wrongGuesses && t.wrongGuesses.has(' '));
-    if (blankSpent) { bb.disabled = true; bb.classList.remove('selected'); }
+    if (t.wrongGuesses && t.wrongGuesses.has(' ')) { bb.disabled = true; bb.classList.remove('selected'); }
   }
   bb.onclick = () => { if (bb.disabled) return; selectedLetter = selectedLetter===' '?null:' '; renderLetterGrid(); };
   lg.appendChild(bb);
@@ -1765,11 +1765,16 @@ function processGuess(gi, ti, letter) {
   const target = players[ti];
   const lc = letter.toLowerCase();
   if (!target.wrongGuesses) target.wrongGuesses = new Set();
-  // A hit reveals every matching tile (same rule as the Daily Jab)
-  const hitIdxs = [];
+  // A letter hit reveals every matching tile (same rule as the Daily Jab).
+  // Blanks stay one per jab — a random one, so position leaks nothing —
+  // otherwise a single space guess would strip all the padding at once.
+  let hitIdxs = [];
   target.tiles.forEach((t, i) => {
     if (!t.revealed && t.char && t.char.toLowerCase() === lc) hitIdxs.push(i);
   });
+  if (lc === ' ' && hitIdxs.length > 1) {
+    hitIdxs = [hitIdxs[Math.floor(Math.random() * hitIdxs.length)]];
+  }
 
   if (hitIdxs.length > 0) {
     let pts = 0;
@@ -2265,10 +2270,11 @@ function botMove() {
   const missed = ch => target.wrongGuesses && target.wrongGuesses.has(ch);
   const hasRevealed = ch => target.tiles.some(t => t.revealed && t.char && t.char.toLowerCase() === ch);
   // English letter frequency, with the blank slotted in early since padded
-  // boards almost always contain trailing spaces. Hits reveal every matching
-  // tile, so anything already revealed or missed is spent.
+  // boards almost always contain trailing spaces. Letter hits reveal every
+  // matching tile, so revealed letters are spent — but blanks come one at a
+  // time, so the blank stays playable until a blank guess misses.
   const order = 'etaoins rhdlucmfwypvbgkjqxz'.split('');
-  const pool = order.filter(ch => !missed(ch) && !hasRevealed(ch));
+  const pool = order.filter(ch => !missed(ch) && (ch === ' ' || !hasRevealed(ch)));
   if (pool.length === 0) return;
   // Mostly plays the best letter, sometimes a weaker one — beatable, not perfect.
   const pick = Math.random() < 0.7 ? pool[0]
