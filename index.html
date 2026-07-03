@@ -131,10 +131,11 @@
   .screen.active { display: block; }
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 1.25rem; margin-bottom: 1rem; }
   label { display: block; font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 5px; margin-top: 12px; }
-  input[type=text], input[type=number] {
+  input[type=text], input[type=number], select {
     width: 100%; padding: 0.6rem 0.75rem; border-radius: 8px;
     border: 1px solid var(--line); background: var(--inset); color: var(--paper); font-size: 1rem; font-family: 'Work Sans', sans-serif;
   }
+  select:focus { outline: 2px solid var(--jab); border-color: transparent; }
   input:focus { outline: 2px solid var(--jab); border-color: transparent; }
   [role="button"]:focus-visible, [role="radio"]:focus-visible { outline: 2px solid var(--jab); outline-offset: 2px; }
   h1:focus-visible, h2:focus-visible, h3:focus-visible { outline: none; }
@@ -504,6 +505,14 @@
 
 <!-- HOME -->
 <div id="screen-home" class="screen active">
+  <div class="card" id="resume-card" style="display:none;border-color:var(--jab);">
+    <div style="font-weight:700;margin-bottom:0.25rem;">🔄 Game in progress</div>
+    <p id="resume-card-text" style="color:var(--muted);font-size:0.85rem;margin-bottom:0.75rem;"></p>
+    <div class="btn-row" style="margin-top:0;">
+      <button class="btn-primary btn-sm" id="resume-btn">Rejoin →</button>
+      <button class="btn-secondary btn-sm" id="resume-dismiss-btn">Dismiss</button>
+    </div>
+  </div>
   <div class="card daily-card" role="button" tabindex="0" aria-label="Daily Jab — one word, six rounds, today's fight" onclick="openDailyJab()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openDailyJab();}">
     <div class="dc-icon" aria-hidden="true">🥊</div>
     <div class="dc-body">
@@ -655,6 +664,12 @@
       <label for="o-rounds">Rounds</label>
       <input type="number" id="o-rounds" value="5" min="1" max="20">
     </div>
+    <label for="o-turn-timer">Turn timer</label>
+    <select id="o-turn-timer">
+      <option value="0">Off — take your time</option>
+      <option value="30">Quick — 30 seconds per turn</option>
+      <option value="60">Relaxed — 60 seconds per turn</option>
+    </select>
   </div>
   <div id="online-setup-error" role="alert" style="color:var(--hit);font-size:0.85rem;text-align:center;margin-bottom:0.5rem;"></div>
   <div class="btn-row">
@@ -708,6 +723,12 @@
         <label for="l-rounds">Rounds</label>
         <input type="number" id="l-rounds" value="5" min="1" max="20">
       </div>
+      <label for="l-turn-timer">Turn timer</label>
+      <select id="l-turn-timer">
+        <option value="0">Off — take your time</option>
+        <option value="30">Quick — 30 seconds per turn</option>
+        <option value="60">Relaxed — 60 seconds per turn</option>
+      </select>
       <div style="height:0.75rem;"></div>
     </div>
     <div id="lobby-player-list" aria-live="polite"></div>
@@ -759,6 +780,7 @@
   <div class="turn-banner" aria-live="polite">
     <span id="turn-name">Player 1</span>'s turn
     <span id="round-label" style="color:var(--muted);font-size:0.8rem;"></span>
+    <span id="turn-timer-label" style="margin-left:8px;font-size:0.85rem;font-family:'Work Sans',sans-serif;"></span>
   </div>
   <div id="not-your-turn" aria-live="polite" style="display:none;text-align:center;font-size:0.85rem;color:var(--muted);margin-bottom:0.75rem;"></div>
   <div class="last-move-banner" id="last-move-banner" aria-live="polite" style="display:none;"></div>
@@ -909,6 +931,10 @@ let selectedTarget = null, selectedLetter = null;
 
 // Online state
 let isOnline = false, isHost = false;
+let turnTimer = 0;            // seconds per turn, 0 = off (host setting)
+let hostTurnDeadline = 0;     // host-side epoch ms for the active turn
+let hostTurnTimeout = null;   // host-side skip timer
+let turnCountdownEnd = 0;     // local epoch ms for the visible countdown
 let lastMove = null;
 let renderPlayTimer = null;
 let gamePhase = 'lobby'; // lobby | entry | play | between-rounds | results
@@ -1043,6 +1069,7 @@ async function createGame() {
 
   charCount = clampInt(document.getElementById('o-char-count').value, 4, 30, 10);
   rounds    = clampInt(document.getElementById('o-rounds').value, 1, 20, 5);
+  turnTimer = parseInt(document.getElementById('o-turn-timer').value) || 0;
   isOnline = true; isHost = true; botMode = false; myName = name;
   gameCode = generateCode();
 
@@ -1060,6 +1087,8 @@ async function createGame() {
     showScreen('screen-lobby');
     showChat();
     startHostHeartbeat();
+    persistSession(true);
+    persistHostState();
   } catch(e) {
     btn.textContent = 'Create game →'; btn.disabled = false;
     setErr('online-setup-error', 'Connection error. Try again.');
@@ -1082,8 +1111,9 @@ async function joinGame() {
   try {
     await connectAbly();
     btn.textContent = 'Join →'; btn.disabled = false;
-    // Announce ourselves — host will reply
-    publish({ type: 'rejoin', name });
+    // Announce ourselves (with retries) — host will reply
+    startRejoinRetry();
+    persistSession(true);
     players = []; myIndex = -1;
     document.getElementById('lobby-code').textContent = code;
     document.getElementById('lobby-settings').style.display = 'none';
@@ -1133,6 +1163,163 @@ function publish(data) {
   if (!gameChannel) return;
   // Tag every message with sender name and host flag
   gameChannel.publish('msg', { ...data, _from: myName, _host: isHost });
+  // Any outgoing host message means game state may have changed — snapshot it
+  if (isHost) persistHostState();
+}
+
+// ── Session persistence — survive reloads (the failsafe) ────────────────────
+// Every online player keeps {code, name} in localStorage; the host also keeps
+// a full game snapshot. After a reload, the home screen offers one-tap rejoin
+// under the SAME name, and a reloaded host restores and re-broadcasts the game.
+const SESSION_KEY = 'wj_session';
+const HOST_STATE_KEY = 'wj_host_state';
+let _lastSessionWrite = 0;
+
+function persistSession(force) {
+  if (!isOnline || !gameCode || !myName) return;
+  if (!force && Date.now() - _lastSessionWrite < 60000) return;
+  _lastSessionWrite = Date.now();
+  try { localStorage.setItem(SESSION_KEY, JSON.stringify({ gameCode, myName, isHost, ts: Date.now() })); } catch(e) {}
+}
+
+function clearSession() {
+  try { localStorage.removeItem(SESSION_KEY); localStorage.removeItem(HOST_STATE_KEY); } catch(e) {}
+}
+
+function persistHostState() {
+  if (!isOnline || !isHost) return;
+  try {
+    localStorage.setItem(HOST_STATE_KEY, JSON.stringify({
+      gameCode, gameMode, charCount, rounds, turnTimer,
+      currentTurn, currentRound, wordsIn, gamePhase, lastMove,
+      players: players.map(p => ({
+        name: p.name, color: p.color, score: p.score, eliminated: p.eliminated,
+        booted: !!p.booted, word: p.word, tiles: p.tiles, wrongGuesses: [...p.wrongGuesses]
+      })),
+      ts: Date.now()
+    }));
+  } catch(e) {}
+  persistSession();
+}
+
+function checkResumeSession() {
+  let sess = null;
+  try { sess = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch(e) {}
+  if (!sess || !sess.gameCode || !sess.myName) return;
+  if (Date.now() - (sess.ts || 0) > 3 * 3600 * 1000) { clearSession(); return; }
+  const card = document.getElementById('resume-card');
+  document.getElementById('resume-card-text').textContent =
+    'You were in game ' + sess.gameCode + ' as ' + sess.myName + (sess.isHost ? ' (host)' : '') + '. Jump back in?';
+  card.style.display = 'block';
+  document.getElementById('resume-btn').onclick = () => resumeSession(sess);
+  document.getElementById('resume-dismiss-btn').onclick = () => { clearSession(); card.style.display = 'none'; };
+}
+
+async function resumeSession(sess) {
+  const btn = document.getElementById('resume-btn');
+  btn.textContent = 'Reconnecting...'; btn.disabled = true;
+  isOnline = true; botMode = false;
+  myName = sess.myName; gameCode = sess.gameCode; isHost = !!sess.isHost;
+  try {
+    if (isHost) {
+      let saved = null;
+      try { saved = JSON.parse(localStorage.getItem(HOST_STATE_KEY) || 'null'); } catch(e) {}
+      if (!saved || saved.gameCode !== gameCode) throw new Error('no saved host state');
+      await connectAbly();
+      restoreHostState(saved);
+    } else {
+      await connectAbly();
+      players = []; myIndex = -1;
+      document.getElementById('lobby-code').textContent = gameCode;
+      document.getElementById('lobby-settings').style.display = 'none';
+      document.getElementById('lobby-waiting-msg').style.display = 'none';
+      document.getElementById('lobby-start-row').style.display = 'none';
+      showGameCodeBanner(gameCode);
+      renderLobby();
+      document.getElementById('lobby-status').textContent = 'Reconnecting to the game...';
+      showScreen('screen-lobby');
+      showChat();
+      startRejoinRetry();
+    }
+    persistSession(true);
+    document.getElementById('resume-card').style.display = 'none';
+    btn.textContent = 'Rejoin →'; btn.disabled = false;
+  } catch(e) {
+    btn.textContent = 'Rejoin →'; btn.disabled = false;
+    document.getElementById('resume-card-text').textContent =
+      "Couldn't reconnect (game " + gameCode + " as " + myName + "). Check your connection and try again.";
+    isOnline = false;
+  }
+}
+
+function restoreHostState(saved) {
+  gameMode = saved.gameMode; charCount = saved.charCount; rounds = saved.rounds;
+  turnTimer = saved.turnTimer || 0;
+  currentTurn = saved.currentTurn || 0; currentRound = saved.currentRound || 0;
+  wordsIn = saved.wordsIn || 0; gamePhase = saved.gamePhase || 'lobby';
+  lastMove = saved.lastMove || null;
+  players = saved.players.map((pd, i) => {
+    const p = mkPlayer(pd.name, i);
+    if (pd.color) p.color = pd.color;
+    p.score = pd.score || 0; p.eliminated = !!pd.eliminated; p.booted = !!pd.booted;
+    p.word = pd.word || ''; p.tiles = pd.tiles || [];
+    p.wrongGuesses = new Set(pd.wrongGuesses || []);
+    return p;
+  });
+  myIndex = players.findIndex(p => p.name === myName);
+  showGameCodeBanner(gameCode);
+  showChat();
+  appendChat('', 'You reconnected as host', true);
+  broadcastToAll({ type: 'chat', name: '__system__', text: myName + ' (host) is back — game restored' });
+  startHostHeartbeat();
+  if (gamePhase === 'lobby') {
+    syncLobbySettings(); renderLobby(); showScreen('screen-lobby');
+    broadcastToAll({ type: 'roster', players: players.map(p => p.name) });
+  } else if (gamePhase === 'entry') {
+    const doneNames = players.filter(p => p.tiles.length > 0).map(p => p.name);
+    broadcastToAll({ type: 'word-ack', done: doneNames, total: players.filter(p => !p.eliminated).length });
+    showOnlineEntry();
+    if (myIndex !== -1 && players[myIndex].tiles.length > 0) {
+      document.getElementById('entry-card').style.display = 'none';
+      document.getElementById('entry-waiting').style.display = 'block';
+      renderEntryWaiting(doneNames, players.length);
+    }
+  } else if (gamePhase === 'play') {
+    broadcastState();
+    showScreen('screen-play'); renderPlay();
+  } else if (gamePhase === 'between-rounds') {
+    showBetweenRounds(); // host branch re-broadcasts the between-rounds message
+  } else if (gamePhase === 'results') {
+    showResults();
+    broadcastGameOver();
+  } else {
+    // Mid-spin or unknown phase — re-run the spin if all words are in
+    if (players.length && players.every(p => p.tiles.length > 0)) beginPlay();
+    else { gamePhase = 'entry'; showOnlineEntry(); }
+  }
+}
+
+// Guests re-announce themselves until the host answers — covers a host that
+// is itself mid-reconnect when the guest comes back.
+let rejoinRetryTimer = null, rejoinTries = 0;
+function startRejoinRetry() {
+  stopRejoinRetry();
+  rejoinTries = 0;
+  const send = () => {
+    rejoinTries++;
+    if (rejoinTries > 25) {
+      stopRejoinRetry();
+      document.getElementById('lobby-status').textContent =
+        "Can't reach the host — they may be reconnecting. Tap Rejoin on the home screen to retry.";
+      return;
+    }
+    publish({ type: 'rejoin', name: myName });
+  };
+  send();
+  rejoinRetryTimer = setInterval(send, 4000);
+}
+function stopRejoinRetry() {
+  if (rejoinRetryTimer) { clearInterval(rejoinRetryTimer); rejoinRetryTimer = null; }
 }
 
 function onAblyMessage(msg) {
@@ -1175,8 +1362,9 @@ function onHostReceive(fromName, data) {
       // Only increment wordsIn if this is a fresh submission (not a rejoin re-submit)
       if (!wasAlreadyIn) wordsIn++;
       const doneNames = players.filter(p => p.tiles.length > 0).map(p => p.name);
-      broadcastToAll({ type: 'word-ack', done: doneNames, total: players.length });
-      if (wordsIn === players.length) {
+      const needed = players.filter(p => !p.eliminated).length;
+      broadcastToAll({ type: 'word-ack', done: doneNames, total: needed });
+      if (wordsIn >= needed) {
         broadcastState();
         beginPlay();
       }
@@ -1219,13 +1407,20 @@ function onHostReceive(fromName, data) {
 
 // Guests receive messages from host
 function onGuestReceive(data) {
+  // Any game-state message addressed to us means the host has seen us
+  if (['rejoin-state', 'start', 'state', 'word-ack', 'between-rounds', 'spin', 'game-over'].includes(data.type)) {
+    stopRejoinRetry();
+  }
   if (data.type === 'roster') {
     players = data.players.map(mkPlayer);
     myIndex = players.findIndex(p => p.name === myName);
+    if (myIndex !== -1) stopRejoinRetry();
     renderLobby();
+    persistSession();
   }
   if (data.type === 'start') {
     charCount = data.charCount; rounds = data.rounds; gameMode = data.gameMode;
+    turnTimer = data.turnTimer || 0;
     players = data.players.map(mkPlayer);
     myIndex = players.findIndex(p => p.name === myName);
     wordsIn = 0;
@@ -1246,6 +1441,13 @@ function onGuestReceive(data) {
     showBetweenRounds();
   }
   if (data.type === 'start-next-round') {
+    if (Array.isArray(data.players)) {
+      const scores = {};
+      players.forEach(p => { scores[p.name] = p.score; });
+      players = data.players.map(mkPlayer);
+      players.forEach(p => { if (scores[p.name] != null) p.score = scores[p.name]; });
+      myIndex = players.findIndex(p => p.name === myName);
+    }
     players.forEach(p => { p.eliminated = false; p.word = ''; p.tiles = []; p.wrongGuesses = new Set(); });
     wordsIn = 0;
     showOnlineEntry();
@@ -1268,8 +1470,18 @@ function onGuestReceive(data) {
     showResults();
   }
   if (data.type === 'rematch') {
+    if (Array.isArray(data.players)) {
+      players = data.players.map(mkPlayer);
+      myIndex = players.findIndex(p => p.name === myName);
+    }
     resetForRematch();
     enterRematchLobby();
+  }
+  if (data.type === 'booted' && data.name === myName) {
+    clearSession();
+    stopRejoinRetry();
+    alert('The host removed you from this game.');
+    playAgain();
   }
   if (data.type === 'spin') {
     _pendingSpinOrder = data.order;
@@ -1298,6 +1510,8 @@ function onGuestReceive(data) {
     const s = data.state;
     charCount = s.charCount; rounds = s.rounds; gameMode = s.gameMode;
     currentRound = s.currentRound; currentTurn = s.currentTurn;
+    turnTimer = s.turnTimer || 0;
+    turnCountdownEnd = (turnTimer && s.turnSecondsLeft) ? Date.now() + s.turnSecondsLeft * 1000 : 0;
     lastMove = s.lastMove || null;
     gamePhase = data.phase || s.gamePhase || 'play';
     // Restore players
@@ -1329,6 +1543,11 @@ function onGuestReceive(data) {
         // Haven't submitted yet — show entry form
         showOnlineEntry();
       }
+    } else {
+      // Unknown/transient phase (e.g. mid-spin) — sit on the play screen;
+      // the host's next broadcast will move us to the right place
+      showScreen('screen-play');
+      if (players.length && players.some(p => p.tiles && p.tiles.length)) renderPlay();
     }
   }
 }
@@ -1353,6 +1572,9 @@ function serializeState() {
       wrongGuesses: [...p.wrongGuesses]
     })),
     currentTurn, currentRound, gameMode, charCount, rounds, gameActive: true, lastMove, gamePhase,
+    turnTimer,
+    turnSecondsLeft: (turnTimer && hostTurnDeadline)
+      ? Math.max(0, Math.ceil((hostTurnDeadline - Date.now()) / 1000)) : 0,
     sound: _pendingSound
   };
   _pendingSound = null;
@@ -1374,6 +1596,8 @@ function applyState(s) {
   });
   currentTurn = s.currentTurn; currentRound = s.currentRound;
   gameMode = s.gameMode; charCount = s.charCount; rounds = s.rounds;
+  turnTimer = s.turnTimer || 0;
+  turnCountdownEnd = (turnTimer && s.turnSecondsLeft) ? Date.now() + s.turnSecondsLeft * 1000 : 0;
   if (document.getElementById('screen-play').classList.contains('active')) {
     renderPlay();
   } else {
@@ -1393,6 +1617,16 @@ function renderLobby() {
     div.innerHTML = `<div class="lobby-dot" style="background:${safeColor(p.color)}"></div>
       <span>${esc(p.name)}</span>
       ${p.name === myName ? '<span style="font-size:0.75rem;color:var(--muted);">(you)</span>' : ''}`;
+    if (isHost && p.name !== myName) {
+      const boot = document.createElement('button');
+      boot.className = 'btn-danger btn-sm';
+      boot.style.marginLeft = 'auto';
+      boot.textContent = '✕';
+      boot.setAttribute('aria-label', 'Remove ' + p.name + ' from the game');
+      boot.title = 'Remove player';
+      boot.onclick = () => bootPlayer(p.name);
+      div.appendChild(boot);
+    }
     list.appendChild(div);
   });
   document.getElementById('lobby-status').textContent =
@@ -1400,6 +1634,43 @@ function renderLobby() {
   if (isHost) {
     document.getElementById('lobby-start-row').style.display = players.length >= 2 ? 'flex' : 'none';
   }
+}
+
+// ── Boot player (host only) ───────────────────────────────────────────────────
+// In the lobby the player is removed outright; mid-game they're eliminated so
+// boards and turn order stay consistent. Their client is told to leave.
+function bootPlayer(name) {
+  if (!isHost) return;
+  const idx = players.findIndex(p => p.name === name);
+  if (idx === -1 || name === myName) return;
+  if (!confirm('Remove ' + name + ' from the game?')) return;
+  broadcastToAll({ type: 'booted', name });
+  if (gamePhase === 'lobby') {
+    players.splice(idx, 1);
+    players.forEach((p, i) => { p.color = COLORS[i % COLORS.length]; });
+    broadcastToAll({ type: 'roster', players: players.map(p => p.name) });
+    renderLobby();
+  } else {
+    players[idx].eliminated = true;
+    players[idx].booted = true; // stays out across rounds and rematches
+    if (selectedTarget === idx) selectedTarget = null;
+    broadcastToAll({ type: 'chat', name: '__system__', text: name + ' was removed by the host' });
+    appendChat('', name + ' was removed by the host', true);
+    if (gamePhase === 'entry') {
+      // Don't wait on their word — start if everyone else is in
+      const remaining = players.filter(p => !p.eliminated);
+      const doneNames = players.filter(p => p.tiles.length > 0).map(p => p.name);
+      broadcastToAll({ type: 'word-ack', done: doneNames, total: remaining.length });
+      if (wordsIn >= remaining.length) { broadcastState(); beginPlay(); }
+    } else if (gamePhase === 'play') {
+      renderPlay();
+      broadcastState();
+      checkRoundEnd();
+    } else {
+      broadcastState();
+    }
+  }
+  persistHostState();
 }
 
 // Host-only game settings shown in the lobby, so a rematch (or a change of
@@ -1420,6 +1691,7 @@ function syncLobbySettings() {
   if (!isHost) return;
   document.getElementById('l-char-count').value = charCount;
   document.getElementById('l-rounds').value = rounds;
+  document.getElementById('l-turn-timer').value = String(turnTimer || 0);
   selectLobbyMode(gameMode);
 }
 
@@ -1450,8 +1722,13 @@ function hostStartGame() {
   if (ls && ls.style.display !== 'none') {
     charCount = clampInt(document.getElementById('l-char-count').value, 4, 30, 10);
     rounds    = clampInt(document.getElementById('l-rounds').value, 1, 20, 5);
+    turnTimer = parseInt(document.getElementById('l-turn-timer').value) || 0;
   }
-  const startMsg = { type: 'start', charCount, rounds, gameMode, players: players.map(p => p.name) };
+  // Entry phase starts NOW — before this fix gamePhase stayed 'lobby' through
+  // the first word entry, so rejoins during round 1 were mistaken for new
+  // lobby joins and a reloaded host restored into the lobby.
+  gamePhase = 'entry';
+  const startMsg = { type: 'start', charCount, rounds, gameMode, turnTimer, players: players.map(p => p.name) };
   broadcastToAll(startMsg);
   wordsIn = 0; currentRound = 0;
   showOnlineEntry();
@@ -1470,6 +1747,7 @@ function resetEntryUI() {
 }
 
 function showOnlineEntry() {
+  gamePhase = 'entry';
   document.getElementById('entry-heading').textContent = myName + ' — enter your word';
   document.getElementById('entry-subtext').textContent = "Only you can see this. It's sent privately.";
   resetEntryUI();
@@ -1532,8 +1810,9 @@ async function submitWord() {
       assignTilePoints(players[myIndex].tiles);
       if (!hostWasAlreadyIn) wordsIn++;
       const doneNames = players.filter(p => p.tiles.length > 0).map(p => p.name);
-      broadcastToAll({ type: 'word-ack', done: doneNames, total: players.length });
-      if (wordsIn === players.length) { broadcastState(); beginPlay(); }
+      const needed = players.filter(p => !p.eliminated).length;
+      broadcastToAll({ type: 'word-ack', done: doneNames, total: needed });
+      if (wordsIn >= needed) { broadcastState(); beginPlay(); }
     } else {
       // Guest sends word to host
       publish({ type: 'word', word: raw });
@@ -1567,6 +1846,7 @@ function beginPlay() {
     currentTurn = 0;
     showScreen('screen-play');
     renderPlay();
+    if (isOnline && isHost) broadcastState(); // sync fresh turn/timer to guests
     if (!isOnline) sfx('turn');
   }, 'play');
 }
@@ -1579,6 +1859,45 @@ function syncChatToPlay() {
     setTimeout(() => { playChatEl.scrollTop = playChatEl.scrollHeight; }, 50);
   }
 }
+
+// ── Turn timer (host-enforced, everyone sees the countdown) ──────────────────
+function armTurnTimer() {
+  if (hostTurnTimeout) { clearTimeout(hostTurnTimeout); hostTurnTimeout = null; }
+  hostTurnDeadline = 0;
+  if (!isOnline || !isHost || !turnTimer || gamePhase !== 'play') return;
+  hostTurnDeadline = Date.now() + turnTimer * 1000;
+  turnCountdownEnd = hostTurnDeadline;
+  hostTurnTimeout = setTimeout(handleTurnTimeout, turnTimer * 1000);
+}
+
+function stopTurnTimer() {
+  if (hostTurnTimeout) { clearTimeout(hostTurnTimeout); hostTurnTimeout = null; }
+  hostTurnDeadline = 0; turnCountdownEnd = 0;
+  renderTurnCountdown();
+}
+
+function handleTurnTimeout() {
+  hostTurnTimeout = null;
+  if (!isOnline || !isHost || gamePhase !== 'play') return;
+  const p = players[activeIdx()];
+  lastMove = { guesser: p.name, guesserColor: p.color, targetIdx: -1, tileIdxs: [], letter: null, result: 'timeout', pts: 0, cracked: false };
+  broadcastToAll({ type: 'chat', name: '__system__', text: '⏱ ' + p.name + ' ran out of time — turn passed' });
+  appendChat('', '⏱ ' + p.name + ' ran out of time — turn passed', true);
+  currentTurn++;
+  selectedTarget = null; selectedLetter = null;
+  renderPlay();
+  broadcastState();
+}
+
+function renderTurnCountdown() {
+  const el = document.getElementById('turn-timer-label');
+  if (!el) return;
+  if (!turnTimer || !turnCountdownEnd || gamePhase !== 'play') { el.textContent = ''; return; }
+  const s = Math.max(0, Math.ceil((turnCountdownEnd - Date.now()) / 1000));
+  el.textContent = '⏱ ' + s + 's';
+  el.style.color = s <= 10 ? 'var(--hit)' : 'var(--muted)';
+}
+setInterval(renderTurnCountdown, 500);
 
 function activeIdx() {
   let i = currentTurn % players.length, n = 0;
@@ -1602,7 +1921,11 @@ function renderPlay() {
 
   // Last move banner
   const lmEl = document.getElementById('last-move-banner');
-  if (lastMove && lmEl) {
+  if (lastMove && lmEl && lastMove.result === 'timeout') {
+    lmEl.innerHTML = `<span class="lm-who" style="color:${safeColor(lastMove.guesserColor)}">${esc(lastMove.guesser)}</span>
+      <span class="lm-result-wrong">⏱ ran out of time — turn passed</span>`;
+    lmEl.style.display = 'flex';
+  } else if (lastMove && lmEl) {
     const tgt = players[lastMove.targetIdx];
     const letterLabel = lastMove.letter === ' ' ? 'SPACE' : lastMove.letter.toUpperCase();
     const crackedNote = lastMove.cracked ? ' — board cracked!' : '';
@@ -1637,6 +1960,16 @@ function renderPlay() {
       <div class="board-status ${p.eliminated?'status-eliminated':'status-alive'}">${p.eliminated?'eliminated':'alive'}</div>
       ${gameMode==='points'?`<div class="board-score">${p.score} pts</div>`:''}
     </div><div class="tiles" id="tiles-${i}"></div>`;
+    if (isOnline && isHost && p.name !== myName && !p.eliminated) {
+      const boot = document.createElement('button');
+      boot.className = 'btn-danger btn-sm';
+      boot.textContent = '✕';
+      boot.style.cssText = 'font-size:0.65rem;padding:2px 8px;';
+      boot.setAttribute('aria-label', 'Remove ' + p.name + ' from the game');
+      boot.title = 'Remove player';
+      boot.onclick = () => bootPlayer(p.name);
+      d.querySelector('.board-header').appendChild(boot);
+    }
     bc.appendChild(d);
     const tc = document.getElementById('tiles-'+i);
     p.tiles.forEach((t, ti) => {
@@ -1692,6 +2025,10 @@ function renderPlay() {
     if (botTimer) clearTimeout(botTimer);
     botTimer = setTimeout(botMove, 1100);
   }
+
+  // Host (re)arms the turn timer whenever the board re-renders
+  if (isOnline && isHost) armTurnTimer();
+  renderTurnCountdown();
 }
 
 function renderTargets() {
@@ -1814,6 +2151,7 @@ function processGuess(gi, ti, letter) {
         ? ' ' + hitIdxs.length + ' × "' + label + '" revealed.'
         : ' A "' + label + '" revealed.';
       setFeedback('Correct!' + (gameMode==='points' ? ' +'+pts+' pts' : revealNote), 'correct');
+      armTurnTimer(); // same player continues with a fresh clock
       if (isOnline && isHost) broadcastState();
     }
     selectedLetter = null;
@@ -1840,10 +2178,11 @@ function processGuess(gi, ti, letter) {
 function startHostHeartbeat() {
   if (heartbeatInterval) clearInterval(heartbeatInterval);
   heartbeatInterval = setInterval(() => {
-    if (gamePhase === 'entry' && wordsIn < players.length) {
+    const needed = players.filter(p => !p.eliminated).length;
+    if (gamePhase === 'entry' && wordsIn < needed) {
       const doneNames = players.filter(p => p.tiles.length > 0).map(p => p.name);
       if (doneNames.length > 0) {
-        broadcastToAll({ type: 'word-ack', done: doneNames, total: players.length });
+        broadcastToAll({ type: 'word-ack', done: doneNames, total: needed });
       }
     }
   }, 4000);
@@ -2025,6 +2364,7 @@ function checkRoundEnd() {
 
 function showBetweenRounds() {
   gamePhase = 'between-rounds';
+  stopTurnTimer();
   if (currentRound >= rounds) { showResults(); return; }
   const nextRound = currentRound + 1;
   document.getElementById('br-title').textContent = 'Round ' + currentRound + ' complete';
@@ -2103,10 +2443,13 @@ function showBetweenRounds() {
 }
 
 function hostNextRound() {
+  // Booted players stay out; sync the trimmed roster with the next round
+  players = players.filter(p => !p.booted);
+  if (isOnline) myIndex = players.findIndex(p => p.name === myName);
   // Spin first, then start next round on confirm
   triggerSpin(() => {
     if (isOnline && isHost) {
-      broadcastToAll({ type: 'start-next-round' });
+      broadcastToAll({ type: 'start-next-round', players: players.map(p => p.name) });
     }
     startNextRound();
   }, 'entry');
@@ -2143,6 +2486,7 @@ function setFeedback(msg, type) {
 // ── Results ───────────────────────────────────────────────────────────────────
 function showResults() {
   gamePhase = 'results';
+  stopTurnTimer();
   showScreen('screen-results');
   try { saveGameResult(); } catch(e) {}
   renderDonateButtons();
@@ -2195,8 +2539,12 @@ function showResults() {
 function playAgain() {
   showGameCodeBanner('');
   stopHeartbeats();
+  stopTurnTimer();
+  stopRejoinRetry();
+  clearSession();
   _resultSaved = false;
   botMode = false;
+  turnTimer = 0;
   if (botTimer) { clearTimeout(botTimer); botTimer = null; }
   setTimeout(renderRecentFeed, 100);
   if (ablyClient) { try { ablyClient.close(); } catch(e) {} ablyClient=null; gameChannel=null; }
@@ -2211,15 +2559,18 @@ function resetForRematch() {
   _resultSaved = false;
   lastMove = null; currentTurn = 0; currentRound = 0; wordsIn = 0;
   selectedTarget = null; selectedLetter = null;
+  stopTurnTimer();
   if (renderPlayTimer) { clearTimeout(renderPlayTimer); renderPlayTimer = null; }
-  players.forEach(p => { p.score = 0; p.eliminated = false; p.word = ''; p.tiles = []; p.wrongGuesses = new Set(); });
+  players = players.filter(p => !p.booted);
+  players.forEach((p, i) => { p.color = COLORS[i % COLORS.length]; p.score = 0; p.eliminated = false; p.word = ''; p.tiles = []; p.wrongGuesses = new Set(); });
+  if (isOnline) myIndex = players.findIndex(p => p.name === myName);
 }
 
 function rematchGame() {
   resetForRematch();
   if (isOnline) {
     if (!isHost) return;
-    broadcastToAll({ type: 'rematch' });
+    broadcastToAll({ type: 'rematch', players: players.map(p => p.name) });
     enterRematchLobby();
   } else {
     players.filter(p => p.isBot).forEach(p => assignBotWord(p));
@@ -2971,6 +3322,13 @@ function shareDailyResult() {
 addPlayer('Player 1'); addPlayer('Player 2'); addPlayer('Player 3');
 initLeaderboard();
 renderDailyHomeBadge();
+checkResumeSession();
+
+// Last-chance snapshot if the host closes or reloads the tab
+window.addEventListener('beforeunload', () => {
+  if (isOnline && isHost) persistHostState();
+  else if (isOnline) persistSession(true);
+});
 
 // Invite deep link — wordjab.io/?join=CODE lands straight on the join screen
 (function () {
