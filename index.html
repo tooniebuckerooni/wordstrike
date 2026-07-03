@@ -1543,6 +1543,11 @@ function onGuestReceive(data) {
         // Haven't submitted yet — show entry form
         showOnlineEntry();
       }
+    } else {
+      // Unknown/transient phase (e.g. mid-spin) — sit on the play screen;
+      // the host's next broadcast will move us to the right place
+      showScreen('screen-play');
+      if (players.length && players.some(p => p.tiles && p.tiles.length)) renderPlay();
     }
   }
 }
@@ -1719,6 +1724,10 @@ function hostStartGame() {
     rounds    = clampInt(document.getElementById('l-rounds').value, 1, 20, 5);
     turnTimer = parseInt(document.getElementById('l-turn-timer').value) || 0;
   }
+  // Entry phase starts NOW — before this fix gamePhase stayed 'lobby' through
+  // the first word entry, so rejoins during round 1 were mistaken for new
+  // lobby joins and a reloaded host restored into the lobby.
+  gamePhase = 'entry';
   const startMsg = { type: 'start', charCount, rounds, gameMode, turnTimer, players: players.map(p => p.name) };
   broadcastToAll(startMsg);
   wordsIn = 0; currentRound = 0;
@@ -1738,6 +1747,7 @@ function resetEntryUI() {
 }
 
 function showOnlineEntry() {
+  gamePhase = 'entry';
   document.getElementById('entry-heading').textContent = myName + ' — enter your word';
   document.getElementById('entry-subtext').textContent = "Only you can see this. It's sent privately.";
   resetEntryUI();
