@@ -485,6 +485,24 @@
   .site-footer a { color: var(--muted-2); text-decoration: none; }
   .site-footer a:hover { color: var(--jab-soft); }
 
+  .lounge-row { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 0.5px solid var(--line); font-size: 0.85rem; }
+  .lounge-row:last-child { border-bottom: none; }
+  .lounge-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .lounge-dot.looking { background: #7fe0a0; box-shadow: 0 0 6px rgba(127,224,160,0.5); }
+  .lounge-dot.in-game { background: var(--jab); }
+  .lounge-name { flex: 1; color: var(--paper); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lounge-status { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
+  .lounge-challenge-btn { font-size: 0.75rem; padding: 0.3rem 0.7rem; background: var(--jab); color: #1a1106; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; white-space: nowrap; }
+  .lounge-challenge-btn:disabled { opacity: 0.4; cursor: default; }
+  .lounge-block-btn { background: transparent; border: none; color: var(--muted); font-size: 0.8rem; cursor: pointer; padding: 2px 4px; }
+  .lounge-block-btn:hover { color: var(--hit-soft); }
+  .lounge-empty { text-align: center; color: var(--muted); font-size: 0.8rem; padding: 0.75rem 0; line-height: 1.5; }
+  .challenge-overlay {
+    display: none; position: fixed; inset: 0; z-index: 60;
+    background: rgba(10,6,20,0.8); align-items: center; justify-content: center;
+  }
+  .challenge-overlay.open { display: flex; }
+
 </style>
 </head>
 <body>
@@ -545,6 +563,29 @@
       <p>No friends around? Spar a round against JabBot.</p>
     </div>
   </div>
+  <div class="card" id="lounge-card">
+    <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:0.3rem;">
+      <h2 style="font-family:'Anton',sans-serif;font-size:0.95rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted-2);">🥊 The Lounge</h2>
+      <span id="lounge-count-badge" style="font-size:0.72rem;color:var(--jab-soft);font-weight:600;"></span>
+    </div>
+    <p style="font-size:0.78rem;color:var(--muted);margin-bottom:0.75rem;">Meet other players. Step in, see who's around, and challenge anyone to a live match.</p>
+    <div id="lounge-setup">
+      <div class="lb-key-row">
+        <input type="text" id="lounge-handle" placeholder="your fight name" maxlength="16" autocomplete="off"
+          onkeydown="if(event.key==='Enter') enterLounge()">
+        <button id="lounge-enter-btn" onclick="enterLounge()">Step in</button>
+      </div>
+    </div>
+    <div id="lounge-room" style="display:none;">
+      <div style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:var(--muted);margin-bottom:0.5rem;">
+        <span>In as</span> <b id="lounge-you" style="color:var(--paper);"></b>
+        <button class="btn-secondary btn-sm" style="margin-left:auto;font-size:0.7rem;padding:0.25rem 0.6rem;" onclick="leaveLounge()">Leave</button>
+      </div>
+      <div id="lounge-members" aria-live="polite"></div>
+    </div>
+    <div id="lounge-feedback" aria-live="polite" style="font-size:0.75rem;color:var(--hit-soft);min-height:1rem;margin-top:0.4rem;"></div>
+  </div>
+
   <div class="card" style="padding-bottom:0.75rem;">
     <div class="lb-tabs">
       <button class="lb-tab active" onclick="switchLbTab('recent')">Recent games</button>
@@ -882,6 +923,20 @@
   </div>
 </div>
 
+
+<!-- INCOMING CHALLENGE -->
+<div class="challenge-overlay" id="challenge-modal" role="dialog" aria-modal="true" aria-labelledby="challenge-modal-title">
+  <div class="card corner-tape" style="max-width:320px;margin:1rem;text-align:center;">
+    <div style="font-size:2.2rem;margin-bottom:0.25rem;" aria-hidden="true">🥊</div>
+    <h3 id="challenge-modal-title" style="font-family:'Anton',sans-serif;text-transform:uppercase;letter-spacing:0.02em;font-size:1.1rem;margin-bottom:0.25rem;"></h3>
+    <p style="color:var(--muted);font-size:0.8rem;margin-bottom:1rem;">challenges you to a match!</p>
+    <div class="btn-row" style="justify-content:center;margin-top:0;">
+      <button class="btn-primary" onclick="acceptChallenge()">Accept →</button>
+      <button class="btn-secondary" onclick="declineChallenge()">Decline</button>
+    </div>
+    <button class="lounge-block-btn" style="margin-top:0.75rem;font-size:0.72rem;" onclick="blockChallenger()">🚫 Block this player</button>
+  </div>
+</div>
 
 <!-- DAILY JAB PLAY -->
 <div id="screen-daily-play" class="screen">
@@ -2551,6 +2606,9 @@ function playAgain() {
   players=[]; currentEntryIndex=0; currentTurn=0; currentRound=0;
   selectedTarget=null; selectedLetter=null;
   isOnline=false; isHost=false; myName=''; myIndex=-1; gameCode=''; wordsIn=0;
+  // If we came here still parked in the lounge, mark ourselves available again
+  if (inLounge) { setLoungeStatus('looking'); refreshLoungeMembers(); }
+  else fetchLoungeOccupancy();
   showScreen('screen-home');
 }
 
@@ -3318,16 +3376,356 @@ function shareDailyResult() {
   }
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// ── The Lounge — live matchmaking over Ably presence ─────────────────────────
+// A global presence channel: entering the lounge makes you visible, presence
+// events keep the list live, and challenges are targeted messages that end in
+// a normal hosted game (challenger hosts, accepter auto-joins the code).
+const LOUNGE_CHANNEL = 'wj-lounge';
+const IDENTITY_KEY = 'wj_identity';
+const BLOCKED_KEY = 'wj_blocked';
+
+let loungeClient = null, loungeChannel = null;
+let inLounge = false;
+let loungeMembers = [];              // [{uid, handle, status}]
+let outgoingChallenge = null;        // {toUid, toHandle, timer}
+let incomingChallenge = null;        // {fromUid, fromHandle, timer}
+let pendingAcceptFrom = null, pendingAcceptTimer = null;
+let lastChallengeSentAt = 0;
+const challengeCooldowns = {};       // uid -> retry-allowed-after timestamp
+
+function getIdentity() {
+  try {
+    const id = JSON.parse(localStorage.getItem(IDENTITY_KEY) || 'null');
+    if (id && id.uid && id.handle) return id;
+  } catch(e) {}
+  return null;
+}
+function saveIdentity(handle) {
+  const existing = getIdentity();
+  const uid = existing ? existing.uid : 'u' + Math.random().toString(36).slice(2, 12);
+  const id = { uid, handle };
+  try { localStorage.setItem(IDENTITY_KEY, JSON.stringify(id)); } catch(e) {}
+  return id;
+}
+
+const HANDLE_BLOCKLIST = ['fuck','shit','cunt','nigg','fagg','bitch','cock','dick','puss','whore','slut','rape','nazi','hitler'];
+function handleError(h) {
+  if (!/^[a-zA-Z0-9 _-]{2,16}$/.test(h)) return 'Fight names are 2–16 letters, numbers, or spaces.';
+  const flat = h.toLowerCase().replace(/[^a-z]/g, '');
+  if (HANDLE_BLOCKLIST.some(w => flat.includes(w))) return 'Pick a friendlier fight name.';
+  return null;
+}
+
+function getBlocked() {
+  try { return JSON.parse(localStorage.getItem(BLOCKED_KEY) || '[]'); } catch(e) { return []; }
+}
+function blockLoungeUid(uid) {
+  try {
+    const b = getBlocked();
+    if (!b.includes(uid)) b.push(uid);
+    localStorage.setItem(BLOCKED_KEY, JSON.stringify(b));
+  } catch(e) {}
+  renderLoungeMembers();
+}
+
+function setLoungeFeedback(msg) {
+  const el = document.getElementById('lounge-feedback');
+  if (el) el.textContent = msg || '';
+}
+
+async function enterLounge() {
+  const input = document.getElementById('lounge-handle');
+  const handle = input.value.trim();
+  const err = handleError(handle);
+  setLoungeFeedback('');
+  if (err) { setLoungeFeedback(err); return; }
+  const id = saveIdentity(handle);
+  const btn = document.getElementById('lounge-enter-btn');
+  btn.textContent = 'Connecting...'; btn.disabled = true;
+  try {
+    await connectLounge(id);
+    inLounge = true;
+    document.getElementById('lounge-setup').style.display = 'none';
+    document.getElementById('lounge-room').style.display = 'block';
+    document.getElementById('lounge-you').textContent = id.handle;
+  } catch(e) {
+    setLoungeFeedback('Could not connect. Check your connection and try again.');
+  }
+  btn.textContent = 'Step in'; btn.disabled = false;
+}
+
+function connectLounge(id) {
+  return new Promise((resolve, reject) => {
+    if (loungeClient) { try { loungeClient.close(); } catch(e) {} }
+    loungeClient = new Ably.Realtime({ key: ABLY_KEY, clientId: id.uid });
+    const to = setTimeout(() => reject(new Error('lounge timeout')), 12000);
+    loungeClient.connection.once('connected', async () => {
+      clearTimeout(to);
+      loungeChannel = loungeClient.channels.get(LOUNGE_CHANNEL);
+      loungeChannel.subscribe('msg', m => onLoungeMessage(m));
+      loungeChannel.presence.subscribe(['enter', 'leave', 'update'], () => refreshLoungeMembers());
+      try { await loungeChannel.presence.enter({ handle: id.handle, status: 'looking' }); } catch(e) {}
+      refreshLoungeMembers();
+      resolve();
+    });
+    loungeClient.connection.once('failed', () => { clearTimeout(to); reject(new Error('lounge failed')); });
+  });
+}
+
+function leaveLounge() {
+  if (outgoingChallenge) cancelOutgoingChallenge(false);
+  hideIncomingChallenge(true);
+  if (loungeChannel) { try { loungeChannel.presence.leave(); } catch(e) {} }
+  if (loungeClient) { try { loungeClient.close(); } catch(e) {} }
+  loungeClient = null; loungeChannel = null; inLounge = false; loungeMembers = [];
+  document.getElementById('lounge-setup').style.display = 'block';
+  document.getElementById('lounge-room').style.display = 'none';
+  setLoungeFeedback('');
+  fetchLoungeOccupancy();
+}
+
+function setLoungeStatus(status) {
+  if (!inLounge || !loungeChannel) return;
+  const id = getIdentity();
+  if (!id) return;
+  try { loungeChannel.presence.update({ handle: id.handle, status }); } catch(e) {}
+}
+
+async function refreshLoungeMembers() {
+  if (!loungeChannel) return;
+  try {
+    const members = await loungeChannel.presence.get();
+    loungeMembers = (members || []).map(m => ({
+      uid: m.clientId,
+      handle: (m.data && typeof m.data.handle === 'string') ? m.data.handle.slice(0, 16) : 'player',
+      status: (m.data && m.data.status === 'in-game') ? 'in-game' : 'looking'
+    }));
+    renderLoungeMembers();
+  } catch(e) {}
+}
+
+function renderLoungeMembers() {
+  const el = document.getElementById('lounge-members');
+  if (!el || !inLounge) return;
+  const me = getIdentity();
+  const blocked = getBlocked();
+  const others = loungeMembers.filter(m => me && m.uid !== me.uid && !blocked.includes(m.uid));
+  const badge = document.getElementById('lounge-count-badge');
+  if (badge) badge.textContent = '🟢 ' + loungeMembers.length + ' here now';
+  el.innerHTML = '';
+  if (others.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'lounge-empty';
+    empty.textContent = 'Nobody else here right now — spar with JabBot while you wait, or send a friend an invite.';
+    el.appendChild(empty);
+    return;
+  }
+  others.sort((a, b) => (a.status === 'looking' ? 0 : 1) - (b.status === 'looking' ? 0 : 1));
+  others.forEach(m => {
+    const row = document.createElement('div');
+    row.className = 'lounge-row';
+    const dot = document.createElement('div');
+    dot.className = 'lounge-dot ' + m.status;
+    const name = document.createElement('span');
+    name.className = 'lounge-name';
+    name.textContent = m.handle;
+    const status = document.createElement('span');
+    status.className = 'lounge-status';
+    status.textContent = m.status === 'in-game' ? 'in a game' : 'looking';
+    const btn = document.createElement('button');
+    btn.className = 'lounge-challenge-btn';
+    if (outgoingChallenge && outgoingChallenge.toUid === m.uid) {
+      btn.textContent = 'Waiting...';
+      btn.onclick = () => cancelOutgoingChallenge(false);
+      btn.title = 'Tap to cancel';
+    } else {
+      btn.textContent = 'Challenge';
+      btn.disabled = m.status !== 'looking' || !!outgoingChallenge || (challengeCooldowns[m.uid] || 0) > Date.now();
+      btn.onclick = () => sendChallenge(m.uid, m.handle);
+    }
+    const block = document.createElement('button');
+    block.className = 'lounge-block-btn';
+    block.textContent = '🚫';
+    block.title = 'Block ' + m.handle;
+    block.setAttribute('aria-label', 'Block ' + m.handle);
+    block.onclick = () => { if (confirm('Block ' + m.handle + '? You won\'t see them or their challenges again on this device.')) blockLoungeUid(m.uid); };
+    row.appendChild(dot); row.appendChild(name); row.appendChild(status); row.appendChild(btn); row.appendChild(block);
+    el.appendChild(row);
+  });
+}
+
+function loungePublish(data) {
+  if (!loungeChannel) return;
+  const id = getIdentity();
+  loungeChannel.publish('msg', { ...data, fromUid: id ? id.uid : '', fromHandle: id ? id.handle : '' });
+}
+
+function sendChallenge(uid, handle) {
+  const now = Date.now();
+  setLoungeFeedback('');
+  if (outgoingChallenge) { setLoungeFeedback('One challenge at a time.'); return; }
+  if (now - lastChallengeSentAt < 5000) { setLoungeFeedback('Easy, slugger — wait a few seconds between challenges.'); return; }
+  if ((challengeCooldowns[uid] || 0) > now) { setLoungeFeedback(handle + ' passed recently — give it a minute.'); return; }
+  lastChallengeSentAt = now;
+  loungePublish({ type: 'challenge', to: uid });
+  outgoingChallenge = { toUid: uid, toHandle: handle, timer: setTimeout(() => cancelOutgoingChallenge(true), 30000) };
+  renderLoungeMembers();
+}
+
+function cancelOutgoingChallenge(expired) {
+  if (!outgoingChallenge) return;
+  clearTimeout(outgoingChallenge.timer);
+  if (expired) setLoungeFeedback(outgoingChallenge.toHandle + " didn't answer.");
+  else loungePublish({ type: 'challenge-cancel', to: outgoingChallenge.toUid });
+  outgoingChallenge = null;
+  renderLoungeMembers();
+}
+
+function onLoungeMessage(m) {
+  const d = m.data || {};
+  const me = getIdentity();
+  if (!me || !inLounge) return;
+  if (m.clientId === me.uid) return;         // own echo
+  if (d.to !== me.uid) return;               // not addressed to us
+  if (getBlocked().includes(d.fromUid)) {
+    if (d.type === 'challenge') loungePublish({ type: 'challenge-decline', to: d.fromUid });
+    return;
+  }
+  if (d.type === 'challenge') showIncomingChallenge(d);
+  if (d.type === 'challenge-cancel' && incomingChallenge && incomingChallenge.fromUid === d.fromUid) {
+    hideIncomingChallenge(true);
+  }
+  if (d.type === 'challenge-decline' && outgoingChallenge && outgoingChallenge.toUid === d.fromUid) {
+    clearTimeout(outgoingChallenge.timer);
+    challengeCooldowns[d.fromUid] = Date.now() + 60000;
+    setLoungeFeedback(outgoingChallenge.toHandle + ' declined.');
+    outgoingChallenge = null;
+    renderLoungeMembers();
+  }
+  if (d.type === 'challenge-accept' && outgoingChallenge && outgoingChallenge.toUid === d.fromUid) {
+    clearTimeout(outgoingChallenge.timer);
+    const opp = outgoingChallenge;
+    outgoingChallenge = null;
+    renderLoungeMembers();
+    hostChallengeGame(opp);
+  }
+  if (d.type === 'challenge-go' && pendingAcceptFrom === d.fromUid && typeof d.code === 'string' && /^[A-Z]{4}$/.test(d.code)) {
+    if (pendingAcceptTimer) { clearTimeout(pendingAcceptTimer); pendingAcceptTimer = null; }
+    pendingAcceptFrom = null;
+    joinChallengeGame(d.code, d.fromHandle);
+  }
+}
+
+function showIncomingChallenge(d) {
+  // Busy in another game or screen — decline automatically
+  if (!document.getElementById('screen-home').classList.contains('active') || incomingChallenge || outgoingChallenge) {
+    loungePublish({ type: 'challenge-decline', to: d.fromUid });
+    return;
+  }
+  incomingChallenge = {
+    fromUid: d.fromUid,
+    fromHandle: String(d.fromHandle || 'A player').slice(0, 16),
+    timer: setTimeout(() => declineChallenge(), 25000)
+  };
+  document.getElementById('challenge-modal-title').textContent = incomingChallenge.fromHandle;
+  document.getElementById('challenge-modal').classList.add('open');
+  sfx('bell');
+}
+
+function hideIncomingChallenge(silent) {
+  if (incomingChallenge && incomingChallenge.timer) clearTimeout(incomingChallenge.timer);
+  if (!silent && incomingChallenge) loungePublish({ type: 'challenge-decline', to: incomingChallenge.fromUid });
+  incomingChallenge = null;
+  document.getElementById('challenge-modal').classList.remove('open');
+}
+
+function declineChallenge() { hideIncomingChallenge(false); }
+
+function blockChallenger() {
+  if (!incomingChallenge) return;
+  const uid = incomingChallenge.fromUid;
+  hideIncomingChallenge(false);
+  blockLoungeUid(uid);
+}
+
+function acceptChallenge() {
+  if (!incomingChallenge) return;
+  clearTimeout(incomingChallenge.timer);
+  const from = incomingChallenge;
+  incomingChallenge = null;
+  document.getElementById('challenge-modal').classList.remove('open');
+  loungePublish({ type: 'challenge-accept', to: from.fromUid });
+  pendingAcceptFrom = from.fromUid;
+  setLoungeFeedback('Waiting for ' + from.fromHandle + ' to open the ring...');
+  pendingAcceptTimer = setTimeout(() => {
+    pendingAcceptFrom = null;
+    setLoungeFeedback("Couldn't start the game — challenge them back?");
+  }, 20000);
+}
+
+async function hostChallengeGame(opp) {
+  const me = getIdentity();
+  if (!me) return;
+  document.getElementById('host-name').value = me.handle;
+  setLoungeStatus('in-game');
+  await createGame();
+  if (isOnline && isHost && gameChannel) {
+    loungePublish({ type: 'challenge-go', to: opp.toUid, code: gameCode });
+    appendChat('', 'Challenge accepted — waiting for ' + opp.toHandle + ' to step in...', true);
+  } else {
+    setLoungeFeedback('Could not open the game. Try again.');
+    setLoungeStatus('looking');
+  }
+}
+
+function joinChallengeGame(code, hostHandle) {
+  const me = getIdentity();
+  if (!me) return;
+  let name = me.handle;
+  if (hostHandle && hostHandle === name) name += ' 2';
+  document.getElementById('join-name').value = name;
+  document.getElementById('join-code').value = code;
+  setLoungeStatus('in-game');
+  setLoungeFeedback('');
+  joinGame();
+}
+
+// Occupancy badge without connecting — one REST call against the channel
+// status API, so the home page can show social proof cheaply.
+async function fetchLoungeOccupancy() {
+  if (inLounge) return; // live presence list owns the badge
+  try {
+    const res = await fetch('https://rest.ably.io/channels/' + LOUNGE_CHANNEL, {
+      headers: { 'Authorization': 'Basic ' + btoa(ABLY_KEY) }
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    const n = data && data.status && data.status.occupancy && data.status.occupancy.metrics
+      ? (data.status.occupancy.metrics.presenceMembers || 0) : 0;
+    const badge = document.getElementById('lounge-count-badge');
+    if (badge) badge.textContent = n > 0 ? ('🟢 ' + n + ' here now') : '';
+  } catch(e) {}
+}
+
+function initLounge() {
+  const id = getIdentity();
+  if (id) document.getElementById('lounge-handle').value = id.handle;
+  fetchLoungeOccupancy();
+}
+
 // Init local player slots
 addPlayer('Player 1'); addPlayer('Player 2'); addPlayer('Player 3');
 initLeaderboard();
 renderDailyHomeBadge();
 checkResumeSession();
+initLounge();
 
 // Last-chance snapshot if the host closes or reloads the tab
 window.addEventListener('beforeunload', () => {
   if (isOnline && isHost) persistHostState();
   else if (isOnline) persistSession(true);
+  if (inLounge && loungeChannel) { try { loungeChannel.presence.leave(); } catch(e) {} }
 });
 
 // Invite deep link — wordjab.io/?join=CODE lands straight on the join screen
