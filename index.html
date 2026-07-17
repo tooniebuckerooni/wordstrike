@@ -2992,6 +2992,7 @@ function saveLocalGame(entry) {
 function hasJsonBin() { return JSONBIN_API_KEY && JSONBIN_BIN_ID; }
 
 const LB_CACHE_KEY = 'wj_lb_cache';
+let _lastBinStatus = ''; // diagnostic: last JSONBin HTTP status / error reason
 
 async function readJsonBin(retries = 2, timeoutMs = 8000) {
   if (!hasJsonBin()) return null;
@@ -3004,6 +3005,7 @@ async function readJsonBin(retries = 2, timeoutMs = 8000) {
         signal: ctrl.signal
       });
       clearTimeout(t);
+      _lastBinStatus = 'read ' + res.status;
       if (res.ok) {
         const data = await res.json();
         // X-Bin-Meta:false returns the record directly; fall back to .record otherwise
@@ -3018,6 +3020,7 @@ async function readJsonBin(retries = 2, timeoutMs = 8000) {
       }
       if (attempt >= retries) return null;
     } catch(e) {
+      _lastBinStatus = (e && e.name === 'AbortError') ? 'read timeout' : 'read blocked (CORS/network)';
       if (attempt >= retries) return null;
       await new Promise(r => setTimeout(r, 600 * (attempt + 1)));
     }
@@ -3044,10 +3047,14 @@ async function writeJsonBin(record, timeoutMs = 8000) {
       signal: ctrl.signal
     });
     clearTimeout(t);
+    _lastBinStatus = 'write ' + res.status;
     // Keep the local cache in step with what we just wrote
     if (res.ok) { try { localStorage.setItem(LB_CACHE_KEY, JSON.stringify({ record, ts: Date.now() })); } catch(e) {} }
     return res.ok;
-  } catch(e) { return false; }
+  } catch(e) {
+    _lastBinStatus = (e && e.name === 'AbortError') ? 'write timeout' : 'write blocked (CORS/network)';
+    return false;
+  }
 }
 
 // ── Save result after a game ──────────────────────────────────────────────────
@@ -3520,7 +3527,8 @@ async function postDailyStreak() {
     btn.textContent = 'Posted ✓';
   } else {
     msg.style.color = 'var(--hit-soft)';
-    msg.textContent = "Couldn't reach the leaderboard — check your connection and try again.";
+    const detail = _lastBinStatus ? ' [' + _lastBinStatus + ']' : '';
+    msg.textContent = "Couldn't reach the leaderboard — try again." + detail;
     btn.disabled = false; btn.textContent = 'Post 🔥';
   }
 }
