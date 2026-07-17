@@ -512,6 +512,8 @@
   <p style="text-align:center;padding:1rem;color:#efe9f7;">WordJab is a free multiplayer word battle game — guess letters, crack your opponents' secret words, and be the last one standing. It needs JavaScript to run; please enable it and reload.</p>
 </noscript>
 
+<div id="conn-badge" role="status" aria-live="polite" style="display:none;position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:80;font-size:0.72rem;padding:4px 12px;border-radius:20px;text-transform:uppercase;letter-spacing:0.04em;font-weight:600;box-shadow:0 2px 10px rgba(0,0,0,0.4);"></div>
+
 <h1 class="wordjab-logo">
   <span class="logo-word">Word</span><span class="logo-jab">Jab</span>
 </h1>
@@ -965,6 +967,15 @@
     <p style="color:var(--muted);font-size:0.85rem;margin-bottom:1rem;" id="daily-result-sub"></p>
     <div class="tiles" id="daily-result-tiles" style="justify-content:center;margin-bottom:1rem;"></div>
     <div class="streak-row" id="daily-streak-row"></div>
+    <div id="daily-streak-post" style="margin-top:1rem;padding-top:0.9rem;border-top:0.5px solid var(--line);">
+      <p style="font-size:0.72rem;color:var(--muted);margin-bottom:0.5rem;">Post your best streak to the global leaderboard</p>
+      <div class="lb-key-row" style="justify-content:center;">
+        <input type="text" id="daily-streak-name" placeholder="your name" maxlength="16" autocomplete="off"
+          onkeydown="if(event.key==='Enter') postDailyStreak()">
+        <button onclick="postDailyStreak()" id="daily-streak-post-btn">Post 🔥</button>
+      </div>
+      <div id="daily-streak-post-msg" aria-live="polite" style="font-size:0.72rem;color:var(--jab-soft);min-height:1rem;margin-top:0.4rem;"></div>
+    </div>
   </div>
   <div class="btn-row">
     <button class="btn-secondary" id="daily-share-btn" onclick="shareDailyResult()" style="flex:1;">Share result</button>
@@ -1188,6 +1199,49 @@ async function joinGame() {
 // ── Ably transport layer ─────────────────────────────────────────────────────
 const ABLY_KEY = 'Y6FQHw.B8pR6A:vK-VnNxcBY3-k9SHNNmFhjiOQPCrePXQQdE39Wrjh_s';
 
+// Small floating badge so players always know the live connection state.
+let _connBadgeTimer = null;
+function setConnBadge(state) {
+  const el = document.getElementById('conn-badge');
+  if (!el) return;
+  if (_connBadgeTimer) { clearTimeout(_connBadgeTimer); _connBadgeTimer = null; }
+  if (state === 'reconnecting') {
+    el.textContent = '⚠ Reconnecting…';
+    el.style.background = 'var(--hit-tint-strong)'; el.style.color = 'var(--hit-soft)';
+    el.style.display = 'block';
+  } else if (state === 'ok') {
+    el.textContent = '✓ Reconnected';
+    el.style.background = 'var(--jab-tint-strong)'; el.style.color = 'var(--jab-soft)';
+    el.style.display = 'block';
+    _connBadgeTimer = setTimeout(() => { el.style.display = 'none'; }, 2500);
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+// On any reconnect, resync so a brief drop can't leave anyone stale:
+// the host re-broadcasts authoritative state; guests re-request it.
+function onGameReconnect() {
+  setConnBadge('ok');
+  if (!isOnline) return;
+  if (isHost) {
+    if (gamePhase === 'play') broadcastState();
+    else if (gamePhase === 'between-rounds') showBetweenRounds();
+    else if (gamePhase === 'entry') {
+      const doneNames = players.filter(p => p.tiles.length > 0).map(p => p.name);
+      const needed = players.filter(p => !p.eliminated).length;
+      broadcastToAll({ type: 'word-ack', done: doneNames, total: needed });
+    } else if (gamePhase === 'lobby') {
+      broadcastToAll({ type: 'roster', players: players.map(p => p.name) });
+    }
+    persistHostState();
+  } else {
+    // Pull the latest full state from the host — silent so brief blips
+    // don't spam "X reconnected" into the chat
+    publish({ type: 'rejoin', name: myName, silent: true });
+  }
+}
+
 async function connectAbly() {
   // Validate key format — Ably keys look like "appId.keyId:secret"
   if (!ABLY_KEY || !ABLY_KEY.includes(':') || ABLY_KEY.startsWith('$')) {
@@ -1197,21 +1251,32 @@ async function connectAbly() {
   return new Promise((resolve, reject) => {
     ablyClient = new Ably.Realtime({
       key: ABLY_KEY,
-      clientId: myName + '_' + Date.now()
+      clientId: myName + '_' + Date.now(),
+      // Resilience tuning: retry drops faster, keep trying longer before giving
+      // up, and don't tear down the connection when a phone briefly backgrounds.
+      disconnectedRetryTimeout: 5000,
+      suspendedRetryTimeout: 8000,
+      realtimeRequestTimeout: 12000,
+      closeOnUnload: false
     });
+    let settled = false, firstConnectSeen = false;
     ablyClient.connection.once('connected', () => {
       gameChannel = ablyClient.channels.get('wj-' + gameCode);
       gameChannel.subscribe(msg => onAblyMessage(msg));
+      settled = true;
       resolve();
     });
-    ablyClient.connection.once('failed', e => reject(new Error('Ably connection failed')));
-    ablyClient.connection.on('disconnected', () => {
-      appendChat('', 'Connection dropped. Reconnecting...', true);
+    ablyClient.connection.on('failed', () => {
+      if (!settled) { settled = true; reject(new Error('Ably connection failed')); }
     });
+    ablyClient.connection.on('disconnected', () => setConnBadge('reconnecting'));
+    ablyClient.connection.on('suspended', () => setConnBadge('reconnecting'));
     ablyClient.connection.on('connected', () => {
-      if (gameChannel) appendChat('', 'Reconnected!', true);
+      // Skip the initial connect; resync only on genuine RE-connects
+      if (!firstConnectSeen) { firstConnectSeen = true; return; }
+      if (gameChannel) onGameReconnect();
     });
-    setTimeout(() => reject(new Error('Connection timed out')), 12000);
+    setTimeout(() => { if (!settled) { settled = true; reject(new Error('Connection timed out')); } }, 15000);
   });
 }
 
@@ -1444,8 +1509,11 @@ function onHostReceive(fromName, data) {
       const alreadySubmitted = players[idx].tiles.length > 0;
       const doneNames = players.filter(p => p.tiles.length > 0).map(p => p.name);
       sendToGuest(data.name, { type: 'rejoin-state', state, myIndex: idx, phase: gamePhase, alreadySubmitted, doneNames, totalPlayers: players.length });
-      broadcastToAll({ type: 'chat', name: '__system__', text: data.name + ' reconnected' });
-      appendChat('', data.name + ' reconnected', true);
+      // Silent resyncs (brief network blips) skip the chat announcement
+      if (!data.silent) {
+        broadcastToAll({ type: 'chat', name: '__system__', text: data.name + ' reconnected' });
+        appendChat('', data.name + ' reconnected', true);
+      }
     } else {
       // Lobby phase or unknown player — normal join flow
       if (!players.find(p => p.name === data.name)) {
@@ -2601,6 +2669,7 @@ function playAgain() {
   _resultSaved = false;
   botMode = false;
   turnTimer = 0;
+  setConnBadge(null);
   if (botTimer) { clearTimeout(botTimer); botTimer = null; }
   setTimeout(renderRecentFeed, 100);
   if (ablyClient) { try { ablyClient.close(); } catch(e) {} ablyClient=null; gameChannel=null; }
@@ -2922,27 +2991,59 @@ function saveLocalGame(entry) {
 
 function hasJsonBin() { return JSONBIN_API_KEY && JSONBIN_BIN_ID; }
 
-async function readJsonBin() {
+const LB_CACHE_KEY = 'wj_lb_cache';
+
+async function readJsonBin(retries = 2) {
   if (!hasJsonBin()) return null;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 8000);
+      const res = await fetch('https://api.jsonbin.io/v3/b/' + JSONBIN_BIN_ID + '/latest', {
+        headers: { 'X-Master-Key': JSONBIN_API_KEY, 'X-Bin-Meta': 'false' },
+        signal: ctrl.signal
+      });
+      clearTimeout(t);
+      if (res.ok) {
+        const data = await res.json();
+        // X-Bin-Meta:false returns the record directly; fall back to .record otherwise
+        const record = (data && data.record) ? data.record : data;
+        try { localStorage.setItem(LB_CACHE_KEY, JSON.stringify({ record, ts: Date.now() })); } catch(e) {}
+        return record;
+      }
+      // 429 = rate limited; back off and retry
+      if (res.status === 429 && attempt < retries) {
+        await new Promise(r => setTimeout(r, 800 * (attempt + 1)));
+        continue;
+      }
+      if (attempt >= retries) return null;
+    } catch(e) {
+      if (attempt >= retries) return null;
+      await new Promise(r => setTimeout(r, 600 * (attempt + 1)));
+    }
+  }
+  return null;
+}
+
+function getCachedLeaderboard() {
   try {
-    const res = await fetch('https://api.jsonbin.io/v3/b/' + JSONBIN_BIN_ID + '/latest', {
-      headers: { 'X-Master-Key': JSONBIN_API_KEY }
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.record;
+    const c = JSON.parse(localStorage.getItem(LB_CACHE_KEY) || 'null');
+    return c && c.record ? c : null;
   } catch(e) { return null; }
 }
 
 async function writeJsonBin(record) {
-  if (!hasJsonBin()) return;
+  if (!hasJsonBin()) return false;
   try {
-    await fetch('https://api.jsonbin.io/v3/b/' + JSONBIN_BIN_ID, {
+    const res = await fetch('https://api.jsonbin.io/v3/b/' + JSONBIN_BIN_ID, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'X-Master-Key': JSONBIN_API_KEY },
       body: JSON.stringify(record)
     });
-  } catch(e) {}
+    // Keep the local cache in step with what we just wrote
+    if (res.ok) { try { localStorage.setItem(LB_CACHE_KEY, JSON.stringify({ record, ts: Date.now() })); } catch(e) {} }
+    return res.ok;
+  } catch(e) { return false; }
 }
 
 // ── Save result after a game ──────────────────────────────────────────────────
@@ -3026,7 +3127,7 @@ function renderRecentFeed() {
   const games = getLocalGames();
   if (games.length === 0) { el.innerHTML = '<div class="lb-empty">No games played yet on this device.</div>'; return; }
   let html = '';
-  games.slice(0, 10).forEach((g, i) => {
+  games.slice(0, 5).forEach((g, i) => {
     // Inject sponsored message every 4 entries
     if (i > 0 && i % 4 === 0) {
       const sp = getSponsoredMsg();
@@ -3059,15 +3160,50 @@ async function loadSharedLeaderboard() {
     el.innerHTML = '<div class="lb-empty" style="font-size:0.75rem;padding:0.5rem 0;">Global leaderboard not configured.</div>';
     return;
   }
-  el.innerHTML = '<div class="lb-empty">Loading...</div>';
-  const record = await readJsonBin();
-  if (!record) { el.innerHTML = '<div class="lb-empty">Could not load leaderboard.</div>'; return; }
+  // Show cached data instantly (if any) so the panel is never blank while loading
+  const cached = getCachedLeaderboard();
+  el.innerHTML = cached
+    ? renderLeaderboardHtml(cached.record, false)
+    : '<div class="lb-empty">Loading global leaderboard…</div>';
 
+  const record = await readJsonBin();
+  if (record) {
+    el.innerHTML = renderLeaderboardHtml(record, false);
+  } else if (cached) {
+    // Couldn't refresh — keep showing the last good copy with a gentle note
+    el.innerHTML = renderLeaderboardHtml(cached.record, true);
+  } else {
+    el.innerHTML = '<div class="lb-empty">Couldn\'t reach the global leaderboard right now.' +
+      '<br><button class="btn-secondary btn-sm" style="margin-top:0.5rem;" onclick="loadSharedLeaderboard()">Retry</button></div>';
+  }
+}
+
+function renderLeaderboardHtml(record, stale) {
+  record = record || {};
   let html = '';
+  if (stale) {
+    html += '<div style="font-size:0.68rem;color:var(--muted);text-align:center;margin-bottom:6px;">Showing last saved — ' +
+      '<a href="#" onclick="loadSharedLeaderboard();return false;" style="color:var(--jab);">refresh</a></div>';
+  }
+
+  // Top daily streaks (new)
+  const streaks = (record.dailyStreaks || []).slice().sort((a, b) => (b.streak || 0) - (a.streak || 0));
+  html += '<div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;"><span aria-hidden="true">🔥</span> longest daily streaks</div>';
+  if (streaks.length === 0) {
+    html += '<div class="lb-empty" style="padding:0.5rem 0;">No streaks posted yet — play the Daily Jab and post yours!</div>';
+  } else {
+    const rankLabels = ['gold','silver','bronze'];
+    streaks.slice(0, 5).forEach((s, i) => {
+      const rl = rankLabels[i] || '';
+      html += '<div class="lb-row"><span class="lb-rank ' + rl + '">' + (i+1) + '</span>';
+      html += '<span class="lb-name">' + esc(s.name) + '</span>';
+      html += '<span class="lb-score">🔥 ' + esc(s.streak) + '</span></div>';
+    });
+  }
 
   // Top scores
   const topScores = record.topScores || [];
-  html += '<div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;"><span aria-hidden="true">🏆</span> top scores</div>';
+  html += '<div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin:10px 0 6px;"><span aria-hidden="true">🏆</span> top scores</div>';
   if (topScores.length === 0) {
     html += '<div class="lb-empty" style="padding:0.5rem 0;">No scores yet.</div>';
   } else {
@@ -3086,7 +3222,7 @@ async function loadSharedLeaderboard() {
   if (sp) {
     const spLabel = sp.sponsor ? 'sponsored · ' + sp.sponsor : 'sponsored';
     html += '<div class="feed-sponsored" style="margin:8px 0">';
-    if (sp.img) html += '<img class="sp-img" src="' + sp.img + '" alt="' + (sp.sponsor || 'sponsor') + '">';
+    if (sp.img) html += '<img class="sp-img" src="' + sp.img + '" alt="' + esc(sp.sponsor || 'sponsor') + '">';
     html += '<div class="sp-body"><div class="sp-label">' + spLabel + '</div>';
     html += '<div class="sp-msg">' + sp.msg + '</div>';
     if (sp.link) html += '<div class="sp-link"><a href="' + sp.link + '" target="_blank" rel="noopener">' + (sp.linkText || sp.link) + '</a></div>';
@@ -3107,7 +3243,7 @@ async function loadSharedLeaderboard() {
     });
   }
 
-  el.innerHTML = html;
+  return html;
 }
 
 function switchLbTab(tab) {
@@ -3334,7 +3470,71 @@ function showDailyResultScreen(won, word, roundsLeft, state) {
     '<div class="streak-box"><div class="num">' + state.streak + '</div><div class="lbl">current streak</div></div>' +
     '<div class="streak-box"><div class="num">' + state.best + '</div><div class="lbl">best streak</div></div>';
 
+  // Streak-post row: prefill saved/lounge name, only meaningful with a streak
+  const postWrap = document.getElementById('daily-streak-post');
+  if (postWrap) {
+    const best = state.best || 0;
+    postWrap.style.display = (hasJsonBin() && best > 0) ? 'block' : 'none';
+    const nameInput = document.getElementById('daily-streak-name');
+    if (nameInput && !nameInput.value) nameInput.value = getSavedPlayerName();
+    document.getElementById('daily-streak-post-msg').textContent = '';
+    document.getElementById('daily-streak-post-btn').disabled = false;
+    document.getElementById('daily-streak-post-btn').textContent = 'Post 🔥';
+  }
+
   lastDailyShare = { won, word, roundsLeft, streak: state.streak };
+}
+
+// Reuse the lounge fight-name if the player has one, else any name they've posted before
+function getSavedPlayerName() {
+  try {
+    const id = JSON.parse(localStorage.getItem(IDENTITY_KEY) || 'null');
+    if (id && id.handle) return id.handle;
+    return localStorage.getItem('wj_player_name') || '';
+  } catch(e) { return ''; }
+}
+
+async function postDailyStreak() {
+  const msg = document.getElementById('daily-streak-post-msg');
+  const btn = document.getElementById('daily-streak-post-btn');
+  const input = document.getElementById('daily-streak-name');
+  const name = (input.value || '').trim();
+  const err = handleError(name);
+  if (err) { msg.style.color = 'var(--hit-soft)'; msg.textContent = err; return; }
+  const best = getDailyState().best || 0;
+  if (best <= 0) { msg.style.color = 'var(--hit-soft)'; msg.textContent = 'Win a Daily Jab first to post a streak.'; return; }
+  try { localStorage.setItem('wj_player_name', name); } catch(e) {}
+  btn.disabled = true; btn.textContent = 'Posting…';
+  msg.style.color = 'var(--muted)'; msg.textContent = '';
+  const ok = await saveDailyStreak(name, best);
+  if (ok) {
+    msg.style.color = 'var(--jab-soft)';
+    msg.textContent = 'Posted! ' + name + ' — 🔥 ' + best + ' best streak.';
+    btn.textContent = 'Posted ✓';
+  } else {
+    msg.style.color = 'var(--hit-soft)';
+    msg.textContent = "Couldn't post right now — try again in a moment.";
+    btn.disabled = false; btn.textContent = 'Post 🔥';
+  }
+}
+
+async function saveDailyStreak(name, best) {
+  if (!hasJsonBin()) return false;
+  try {
+    const record = await readJsonBin() || {};
+    record.dailyStreaks = record.dailyStreaks || [];
+    // Dedupe by name (case-insensitive), keep the highest streak
+    const existing = record.dailyStreaks.find(d => (d.name || '').toLowerCase() === name.toLowerCase());
+    if (existing) {
+      if (best > (existing.streak || 0)) { existing.streak = best; existing.ts = Date.now(); }
+    } else {
+      record.dailyStreaks.push({ name, streak: best, ts: Date.now() });
+    }
+    record.dailyStreaks.sort((a, b) => (b.streak || 0) - (a.streak || 0));
+    record.dailyStreaks = record.dailyStreaks.slice(0, 25);
+    await writeJsonBin(record);
+    return true;
+  } catch(e) { return false; }
 }
 
 let lastDailyShare = null;
@@ -3459,8 +3659,12 @@ async function enterLounge() {
 function connectLounge(id) {
   return new Promise((resolve, reject) => {
     if (loungeClient) { try { loungeClient.close(); } catch(e) {} }
-    loungeClient = new Ably.Realtime({ key: ABLY_KEY, clientId: id.uid });
+    loungeClient = new Ably.Realtime({
+      key: ABLY_KEY, clientId: id.uid,
+      disconnectedRetryTimeout: 5000, suspendedRetryTimeout: 8000, closeOnUnload: false
+    });
     const to = setTimeout(() => reject(new Error('lounge timeout')), 12000);
+    let firstConnectSeen = false;
     loungeClient.connection.once('connected', async () => {
       clearTimeout(to);
       loungeChannel = loungeClient.channels.get(LOUNGE_CHANNEL);
@@ -3470,7 +3674,17 @@ function connectLounge(id) {
       refreshLoungeMembers();
       resolve();
     });
-    loungeClient.connection.once('failed', () => { clearTimeout(to); reject(new Error('lounge failed')); });
+    loungeClient.connection.on('failed', () => { clearTimeout(to); reject(new Error('lounge failed')); });
+    // On reconnect, re-assert our presence and refresh the roster
+    loungeClient.connection.on('connected', () => {
+      if (!firstConnectSeen) { firstConnectSeen = true; return; }
+      if (inLounge && loungeChannel) {
+        const cur = getIdentity();
+        const status = (isOnline ? 'in-game' : 'looking');
+        try { loungeChannel.presence.enter({ handle: cur ? cur.handle : id.handle, status }); } catch(e) {}
+        refreshLoungeMembers();
+      }
+    });
   });
 }
 
