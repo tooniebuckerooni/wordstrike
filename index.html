@@ -2993,12 +2993,12 @@ function hasJsonBin() { return JSONBIN_API_KEY && JSONBIN_BIN_ID; }
 
 const LB_CACHE_KEY = 'wj_lb_cache';
 
-async function readJsonBin(retries = 2) {
+async function readJsonBin(retries = 2, timeoutMs = 8000) {
   if (!hasJsonBin()) return null;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 8000);
+      const t = setTimeout(() => ctrl.abort(), timeoutMs);
       const res = await fetch('https://api.jsonbin.io/v3/b/' + JSONBIN_BIN_ID + '/latest', {
         headers: { 'X-Master-Key': JSONBIN_API_KEY, 'X-Bin-Meta': 'false' },
         signal: ctrl.signal
@@ -3032,14 +3032,18 @@ function getCachedLeaderboard() {
   } catch(e) { return null; }
 }
 
-async function writeJsonBin(record) {
+async function writeJsonBin(record, timeoutMs = 8000) {
   if (!hasJsonBin()) return false;
   try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
     const res = await fetch('https://api.jsonbin.io/v3/b/' + JSONBIN_BIN_ID, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'X-Master-Key': JSONBIN_API_KEY },
-      body: JSON.stringify(record)
+      body: JSON.stringify(record),
+      signal: ctrl.signal
     });
+    clearTimeout(t);
     // Keep the local cache in step with what we just wrote
     if (res.ok) { try { localStorage.setItem(LB_CACHE_KEY, JSON.stringify({ record, ts: Date.now() })); } catch(e) {} }
     return res.ok;
@@ -3505,15 +3509,18 @@ async function postDailyStreak() {
   if (best <= 0) { msg.style.color = 'var(--hit-soft)'; msg.textContent = 'Win a Daily Jab first to post a streak.'; return; }
   try { localStorage.setItem('wj_player_name', name); } catch(e) {}
   btn.disabled = true; btn.textContent = 'Posting…';
-  msg.style.color = 'var(--muted)'; msg.textContent = '';
-  const ok = await saveDailyStreak(name, best);
-  if (ok) {
+  msg.style.color = 'var(--muted)'; msg.textContent = 'Posting your streak…';
+  // Hard cap the whole operation so the button can never look stuck
+  const timeout = new Promise(res => setTimeout(() => res('timeout'), 14000));
+  let ok = false;
+  try { ok = await Promise.race([saveDailyStreak(name, best), timeout]); } catch(e) { ok = false; }
+  if (ok === true) {
     msg.style.color = 'var(--jab-soft)';
     msg.textContent = 'Posted! ' + name + ' — 🔥 ' + best + ' best streak.';
     btn.textContent = 'Posted ✓';
   } else {
     msg.style.color = 'var(--hit-soft)';
-    msg.textContent = "Couldn't post right now — try again in a moment.";
+    msg.textContent = "Couldn't reach the leaderboard — check your connection and try again.";
     btn.disabled = false; btn.textContent = 'Post 🔥';
   }
 }
@@ -3521,7 +3528,8 @@ async function postDailyStreak() {
 async function saveDailyStreak(name, best) {
   if (!hasJsonBin()) return false;
   try {
-    const record = await readJsonBin() || {};
+    // Fast single read (6s) so a flaky bin can't hang the Post button
+    const record = await readJsonBin(0, 6000) || {};
     record.dailyStreaks = record.dailyStreaks || [];
     // Dedupe by name (case-insensitive), keep the highest streak
     const existing = record.dailyStreaks.find(d => (d.name || '').toLowerCase() === name.toLowerCase());
@@ -3532,8 +3540,7 @@ async function saveDailyStreak(name, best) {
     }
     record.dailyStreaks.sort((a, b) => (b.streak || 0) - (a.streak || 0));
     record.dailyStreaks = record.dailyStreaks.slice(0, 25);
-    await writeJsonBin(record);
-    return true;
+    return await writeJsonBin(record); // true only if the write actually landed
   } catch(e) { return false; }
 }
 
