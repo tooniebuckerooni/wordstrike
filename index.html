@@ -968,11 +968,11 @@
     <div class="tiles" id="daily-result-tiles" style="justify-content:center;margin-bottom:1rem;"></div>
     <div class="streak-row" id="daily-streak-row"></div>
     <div id="daily-streak-post" style="margin-top:1rem;padding-top:0.9rem;border-top:0.5px solid var(--line);">
-      <p style="font-size:0.72rem;color:var(--muted);margin-bottom:0.5rem;">Post your best streak to the global leaderboard</p>
+      <p style="font-size:0.72rem;color:var(--muted);margin-bottom:0.5rem;">Claim your name &amp; save your streak to the global board</p>
       <div class="lb-key-row" style="justify-content:center;">
         <input type="text" id="daily-streak-name" placeholder="your name" maxlength="16" autocomplete="off"
           onkeydown="if(event.key==='Enter') postDailyStreak()">
-        <button onclick="postDailyStreak()" id="daily-streak-post-btn">Post 🔥</button>
+        <button onclick="postDailyStreak()" id="daily-streak-post-btn">Save 🔥</button>
       </div>
       <div id="daily-streak-post-msg" aria-live="polite" style="font-size:0.72rem;color:var(--jab-soft);min-height:1rem;margin-top:0.4rem;"></div>
     </div>
@@ -3053,6 +3053,30 @@ async function apiPost(path, body, timeoutMs = 8000) {
   }
 }
 
+// Like apiPost but returns { ok, status, data } so callers can read the
+// server's response (streak values, "name taken" 409, etc.).
+async function apiPostJson(path, body, timeoutMs = 8000) {
+  if (!hasBackend()) return null;
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    const res = await fetch(API_BASE + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: ctrl.signal
+    });
+    clearTimeout(t);
+    _lastBinStatus = 'write ' + res.status;
+    let data = {};
+    try { data = await res.json(); } catch(e) {}
+    return { ok: res.ok && data.ok !== false, status: res.status, data: data || {} };
+  } catch(e) {
+    _lastBinStatus = (e && e.name === 'AbortError') ? 'write timeout' : 'write blocked (CORS/network)';
+    return null;
+  }
+}
+
 // ── Save result after a game ──────────────────────────────────────────────────
 let _resultSaved = false;
 
@@ -3455,16 +3479,16 @@ function showDailyResultScreen(won, word, roundsLeft, state) {
     '<div class="streak-box"><div class="num">' + state.streak + '</div><div class="lbl">current streak</div></div>' +
     '<div class="streak-box"><div class="num">' + state.best + '</div><div class="lbl">best streak</div></div>';
 
-  // Streak-post row: prefill saved/lounge name, only meaningful with a streak
+  // Streak-post row: shown once you've played today; prefill your claimed name
   const postWrap = document.getElementById('daily-streak-post');
   if (postWrap) {
-    const best = state.best || 0;
-    postWrap.style.display = (hasBackend() && best > 0) ? 'block' : 'none';
+    const playedToday = state.lastPlayedDate === todayStr();
+    postWrap.style.display = (hasBackend() && playedToday && (state.best || 0) > 0) ? 'block' : 'none';
     const nameInput = document.getElementById('daily-streak-name');
     if (nameInput && !nameInput.value) nameInput.value = getSavedPlayerName();
     document.getElementById('daily-streak-post-msg').textContent = '';
     document.getElementById('daily-streak-post-btn').disabled = false;
-    document.getElementById('daily-streak-post-btn').textContent = 'Post 🔥';
+    document.getElementById('daily-streak-post-btn').textContent = 'Save 🔥';
   }
 
   lastDailyShare = { won, word, roundsLeft, streak: state.streak };
@@ -3486,31 +3510,49 @@ async function postDailyStreak() {
   const name = (input.value || '').trim();
   const err = handleError(name);
   if (err) { msg.style.color = 'var(--hit-soft)'; msg.textContent = err; return; }
-  const best = getDailyState().best || 0;
-  if (best <= 0) { msg.style.color = 'var(--hit-soft)'; msg.textContent = 'Win a Daily Jab first to post a streak.'; return; }
-  try { localStorage.setItem('wj_player_name', name); } catch(e) {}
-  btn.disabled = true; btn.textContent = 'Posting…';
-  msg.style.color = 'var(--muted)'; msg.textContent = 'Posting your streak…';
+  const state = getDailyState();
+  if (state.lastPlayedDate !== todayStr()) {
+    msg.style.color = 'var(--hit-soft)'; msg.textContent = "Play today's Daily Jab first."; return;
+  }
+  const won = state.lastResult === 'win';
+  btn.disabled = true; btn.textContent = 'Saving…';
+  msg.style.color = 'var(--muted)'; msg.textContent = 'Saving to the global board…';
   // Hard cap the whole operation so the button can never look stuck
-  const timeout = new Promise(res => setTimeout(() => res('timeout'), 14000));
-  let ok = false;
-  try { ok = await Promise.race([saveDailyStreak(name, best), timeout]); } catch(e) { ok = false; }
-  if (ok === true) {
+  const timeout = new Promise(res => setTimeout(() => res({ ok: false, timeout: true }), 14000));
+  let r;
+  try { r = await Promise.race([submitDaily(name, won), timeout]); } catch(e) { r = { ok: false }; }
+  if (r && r.ok) {
+    saveIdentity(name); // remember the claimed name (shared with the lounge)
     msg.style.color = 'var(--jab-soft)';
-    msg.textContent = 'Posted! ' + name + ' — 🔥 ' + best + ' best streak.';
-    btn.textContent = 'Posted ✓';
+    msg.textContent = r.already
+      ? ("Already saved today — 🔥 " + r.best + " best.")
+      : ('Saved! ' + name + ' — 🔥 ' + r.best + ' best' + (r.streak ? (', ' + r.streak + ' current') : '') + '.');
+    btn.textContent = 'Saved ✓';
+    loadSharedLeaderboard(); // reflect it on the board right away
+  } else if (r && r.taken) {
+    msg.style.color = 'var(--hit-soft)';
+    msg.textContent = 'That name is taken. Pick another.';
+    btn.disabled = false; btn.textContent = 'Save 🔥';
   } else {
     msg.style.color = 'var(--hit-soft)';
     const detail = _lastBinStatus ? ' [' + _lastBinStatus + ']' : '';
     msg.textContent = "Couldn't reach the leaderboard — try again." + detail;
-    btn.disabled = false; btn.textContent = 'Post 🔥';
+    btn.disabled = false; btn.textContent = 'Save 🔥';
   }
 }
 
-async function saveDailyStreak(name, best) {
-  if (!hasBackend()) return false;
-  // The Worker dedupes by name and keeps the highest streak.
-  return await apiPost('/streak', { name, streak: best });
+// Claim/verify the name (proves ownership via the browser secret), then record
+// today's result. The server computes the streak — the client never sends a number.
+async function submitDaily(name, won) {
+  if (!hasBackend()) return { ok: false };
+  const secret = mySecret();
+  const reg = await apiPostJson('/register', { name, secret });
+  if (!reg) return { ok: false };
+  if (reg.status === 409) return { ok: false, taken: true };
+  if (!reg.ok) return { ok: false };
+  const d = await apiPostJson('/daily', { name, secret, won });
+  if (!d || !d.ok) return { ok: false };
+  return { ok: true, streak: d.data.streak || 0, best: d.data.best || 0, already: !!d.data.already };
 }
 
 let lastDailyShare = null;
@@ -3571,19 +3613,43 @@ let pendingAcceptFrom = null, pendingAcceptTimer = null;
 let lastChallengeSentAt = 0;
 const challengeCooldowns = {};       // uid -> retry-allowed-after timestamp
 
+// A per-browser secret token proves you own your name to the server, so
+// nobody can post streaks under someone else's name.
+function genSecret() {
+  try {
+    const a = new Uint8Array(16);
+    (self.crypto || window.crypto).getRandomValues(a);
+    return Array.from(a, b => b.toString(16).padStart(2, '0')).join('');
+  } catch(e) {
+    return (Math.random().toString(36) + Math.random().toString(36)).replace(/\./g, '').slice(0, 32);
+  }
+}
 function getIdentity() {
   try {
     const id = JSON.parse(localStorage.getItem(IDENTITY_KEY) || 'null');
-    if (id && id.uid && id.handle) return id;
+    if (id && id.uid && id.handle) {
+      if (!id.secret) { id.secret = genSecret(); localStorage.setItem(IDENTITY_KEY, JSON.stringify(id)); }
+      return id;
+    }
   } catch(e) {}
   return null;
 }
 function saveIdentity(handle) {
   const existing = getIdentity();
   const uid = existing ? existing.uid : 'u' + Math.random().toString(36).slice(2, 12);
-  const id = { uid, handle };
+  const id = { uid, handle, secret: mySecret() };
   try { localStorage.setItem(IDENTITY_KEY, JSON.stringify(id)); } catch(e) {}
   return id;
+}
+// One stable secret per browser — reused whether or not a name is claimed yet,
+// so the secret used to /register a name matches the one stored with it.
+function mySecret() {
+  const id = getIdentity();
+  if (id && id.secret) return id.secret;
+  let s = '';
+  try { s = localStorage.getItem('wj_secret') || ''; } catch(e) {}
+  if (!s) { s = genSecret(); try { localStorage.setItem('wj_secret', s); } catch(e) {} }
+  return s;
 }
 
 const HANDLE_BLOCKLIST = ['fuck','shit','cunt','nigg','fagg','bitch','cock','dick','puss','whore','slut','rape','nazi','hitler'];
