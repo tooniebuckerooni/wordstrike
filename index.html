@@ -986,8 +986,9 @@
 <script src="https://cdn.ably.com/lib/ably.min-2.js"></script>
 <script>
 // ── Config — edit these once then push to GitHub ────────────────────────────
-const JSONBIN_API_KEY  = '$2a$10$PVXq.zwEZSkClcJR8QGKEORxeP9qttGqLwgyEFBgU8bkEQb.NaebG';
-const JSONBIN_BIN_ID   = '6a01f4bf250b1311c33506fd';
+// Global leaderboard now runs on a Cloudflare Worker (KV-backed). No secret
+// keys live in this page anymore — the Worker owns storage and the merge logic.
+const API_BASE         = 'https://wordjab-api.dustinramsbottom.workers.dev';
 const PAYPAL_USERNAME  = 'FatCityEntertainment';
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -2989,31 +2990,26 @@ function saveLocalGame(entry) {
   } catch(e) {}
 }
 
-function hasJsonBin() { return JSONBIN_API_KEY && JSONBIN_BIN_ID; }
+function hasBackend() { return !!API_BASE; }
 
 const LB_CACHE_KEY = 'wj_lb_cache';
-let _lastBinStatus = ''; // diagnostic: last JSONBin HTTP status / error reason
+let _lastBinStatus = ''; // diagnostic: last backend HTTP status / error reason
 
+// GET the whole leaderboard from the Worker (with retry + local cache).
 async function readJsonBin(retries = 2, timeoutMs = 8000) {
-  if (!hasJsonBin()) return null;
+  if (!hasBackend()) return null;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), timeoutMs);
-      const res = await fetch('https://api.jsonbin.io/v3/b/' + JSONBIN_BIN_ID + '/latest', {
-        headers: { 'X-Master-Key': JSONBIN_API_KEY, 'X-Bin-Meta': 'false' },
-        signal: ctrl.signal
-      });
+      const res = await fetch(API_BASE + '/leaderboard', { signal: ctrl.signal });
       clearTimeout(t);
       _lastBinStatus = 'read ' + res.status;
       if (res.ok) {
-        const data = await res.json();
-        // X-Bin-Meta:false returns the record directly; fall back to .record otherwise
-        const record = (data && data.record) ? data.record : data;
+        const record = await res.json();
         try { localStorage.setItem(LB_CACHE_KEY, JSON.stringify({ record, ts: Date.now() })); } catch(e) {}
         return record;
       }
-      // 429 = rate limited; back off and retry
       if (res.status === 429 && attempt < retries) {
         await new Promise(r => setTimeout(r, 800 * (attempt + 1)));
         continue;
@@ -3035,21 +3031,21 @@ function getCachedLeaderboard() {
   } catch(e) { return null; }
 }
 
-async function writeJsonBin(record, timeoutMs = 8000) {
-  if (!hasJsonBin()) return false;
+// POST a small update to the Worker, which owns the merge logic (no more
+// read-modify-write from the client, so no clobbering).
+async function apiPost(path, body, timeoutMs = 8000) {
+  if (!hasBackend()) return false;
   try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), timeoutMs);
-    const res = await fetch('https://api.jsonbin.io/v3/b/' + JSONBIN_BIN_ID, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'X-Master-Key': JSONBIN_API_KEY },
-      body: JSON.stringify(record),
+    const res = await fetch(API_BASE + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
       signal: ctrl.signal
     });
     clearTimeout(t);
     _lastBinStatus = 'write ' + res.status;
-    // Keep the local cache in step with what we just wrote
-    if (res.ok) { try { localStorage.setItem(LB_CACHE_KEY, JSON.stringify({ record, ts: Date.now() })); } catch(e) {} }
     return res.ok;
   } catch(e) {
     _lastBinStatus = (e && e.name === 'AbortError') ? 'write timeout' : 'write blocked (CORS/network)';
@@ -3095,31 +3091,9 @@ function saveGameResult() {
 }
 
 async function saveSharedResult(entry) {
-  if (!hasJsonBin()) return;
-  try {
-    const record = await readJsonBin() || { topScores: [], recentGames: [] };
-
-    // Update recent games (keep last 20)
-    record.recentGames = record.recentGames || [];
-    record.recentGames.unshift(entry);
-    record.recentGames = record.recentGames.slice(0, 20);
-
-    // Update top scores — highest single-game score, points mode only
-    if (gameMode === 'points') {
-      record.topScores = record.topScores || [];
-      record.topScores.push({ name: entry.winner, score: entry.score, players: entry.players, ts: entry.ts });
-      record.topScores.sort((a, b) => b.score - a.score);
-      record.topScores = record.topScores.slice(0, 10);
-    }
-
-    // Longest game = most total guesses
-    record.longestGames = record.longestGames || [];
-    record.longestGames.push({ winner: entry.winner, winnerColor: entry.winnerColor, totalGuesses: entry.totalGuesses, players: entry.players, ts: entry.ts });
-    record.longestGames.sort((a, b) => b.totalGuesses - a.totalGuesses);
-    record.longestGames = record.longestGames.slice(0, 10);
-
-    await writeJsonBin(record);
-  } catch(e) {}
+  if (!hasBackend()) return;
+  // The Worker merges this into recentGames / topScores / longestGames.
+  try { await apiPost('/result', entry); } catch(e) {}
 }
 
 // ── Render helpers ─────────────────────────────────────────────────────────────
@@ -3167,7 +3141,7 @@ function renderRecentFeed() {
 async function loadSharedLeaderboard() {
   const el = document.getElementById('lb-shared-content');
   if (!el) return;
-  if (!hasJsonBin()) {
+  if (!hasBackend()) {
     el.innerHTML = '<div class="lb-empty" style="font-size:0.75rem;padding:0.5rem 0;">Global leaderboard not configured.</div>';
     return;
   }
@@ -3268,7 +3242,7 @@ function switchLbTab(tab) {
 function initLeaderboard() {
   renderRecentFeed();
   renderDonateButtons();
-  if (hasJsonBin()) loadSharedLeaderboard();
+  if (hasBackend()) loadSharedLeaderboard();
 }
 
 
@@ -3485,7 +3459,7 @@ function showDailyResultScreen(won, word, roundsLeft, state) {
   const postWrap = document.getElementById('daily-streak-post');
   if (postWrap) {
     const best = state.best || 0;
-    postWrap.style.display = (hasJsonBin() && best > 0) ? 'block' : 'none';
+    postWrap.style.display = (hasBackend() && best > 0) ? 'block' : 'none';
     const nameInput = document.getElementById('daily-streak-name');
     if (nameInput && !nameInput.value) nameInput.value = getSavedPlayerName();
     document.getElementById('daily-streak-post-msg').textContent = '';
@@ -3534,22 +3508,9 @@ async function postDailyStreak() {
 }
 
 async function saveDailyStreak(name, best) {
-  if (!hasJsonBin()) return false;
-  try {
-    // Fast single read (6s) so a flaky bin can't hang the Post button
-    const record = await readJsonBin(0, 6000) || {};
-    record.dailyStreaks = record.dailyStreaks || [];
-    // Dedupe by name (case-insensitive), keep the highest streak
-    const existing = record.dailyStreaks.find(d => (d.name || '').toLowerCase() === name.toLowerCase());
-    if (existing) {
-      if (best > (existing.streak || 0)) { existing.streak = best; existing.ts = Date.now(); }
-    } else {
-      record.dailyStreaks.push({ name, streak: best, ts: Date.now() });
-    }
-    record.dailyStreaks.sort((a, b) => (b.streak || 0) - (a.streak || 0));
-    record.dailyStreaks = record.dailyStreaks.slice(0, 25);
-    return await writeJsonBin(record); // true only if the write actually landed
-  } catch(e) { return false; }
+  if (!hasBackend()) return false;
+  // The Worker dedupes by name and keeps the highest streak.
+  return await apiPost('/streak', { name, streak: best });
 }
 
 let lastDailyShare = null;
