@@ -589,6 +589,19 @@
     <div id="lounge-feedback" aria-live="polite" style="font-size:0.75rem;color:var(--hit-soft);min-height:1rem;margin-top:0.4rem;"></div>
   </div>
 
+  <div class="card" id="friends-card" style="display:none;">
+    <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:0.3rem;">
+      <h2 style="font-family:'Anton',sans-serif;font-size:0.95rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted-2);">⭐ Friends</h2>
+      <span id="friends-online-badge" style="font-size:0.72rem;color:var(--jab-soft);font-weight:600;"></span>
+    </div>
+    <div id="friends-list" aria-live="polite"></div>
+    <div class="lb-key-row" style="margin-top:0.6rem;">
+      <input type="text" id="friend-add-input" placeholder="add a friend by name" maxlength="16" autocomplete="off"
+        onkeydown="if(event.key==='Enter') addFriendFromInput()">
+      <button onclick="addFriendFromInput()">Add</button>
+    </div>
+  </div>
+
   <div class="card" style="padding-bottom:0.75rem;">
     <div class="lb-tabs">
       <button class="lb-tab active" onclick="switchLbTab('recent')">Recent games</button>
@@ -2679,7 +2692,8 @@ function playAgain() {
   isOnline=false; isHost=false; myName=''; myIndex=-1; gameCode=''; wordsIn=0;
   // If we came here still parked in the lounge, mark ourselves available again
   if (inLounge) { setLoungeStatus('looking'); refreshLoungeMembers(); }
-  else fetchLoungeOccupancy();
+  else { fetchLoungeOccupancy(); fetchFriendPresence(); }
+  renderFriends();
   showScreen('screen-home');
 }
 
@@ -3195,8 +3209,10 @@ function renderLeaderboardHtml(record, stale) {
       '<a href="#" onclick="loadSharedLeaderboard();return false;" style="color:var(--jab);">refresh</a></div>';
   }
 
-  // Top daily streaks (new)
+  // Top daily streaks — with the viewer's own rank + percentile
   const streaks = (record.dailyStreaks || []).slice().sort((a, b) => (b.streak || 0) - (a.streak || 0));
+  const myName = getSavedPlayerName();
+  const myRank = myName ? streaks.findIndex(s => (s.name || '').toLowerCase() === myName.toLowerCase()) : -1;
   html += '<div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;"><span aria-hidden="true">🔥</span> longest daily streaks</div>';
   if (streaks.length === 0) {
     html += '<div class="lb-empty" style="padding:0.5rem 0;">No streaks posted yet — play the Daily Jab and post yours!</div>';
@@ -3204,10 +3220,23 @@ function renderLeaderboardHtml(record, stale) {
     const rankLabels = ['gold','silver','bronze'];
     streaks.slice(0, 5).forEach((s, i) => {
       const rl = rankLabels[i] || '';
-      html += '<div class="lb-row"><span class="lb-rank ' + rl + '">' + (i+1) + '</span>';
-      html += '<span class="lb-name">' + esc(s.name) + '</span>';
+      const mine = myRank === i;
+      html += '<div class="lb-row"' + (mine ? ' style="background:var(--jab-tint);border-radius:6px;"' : '') + '><span class="lb-rank ' + rl + '">' + (i+1) + '</span>';
+      html += '<span class="lb-name">' + esc(s.name) + (mine ? ' <span style="color:var(--jab);font-size:0.7rem;">(you)</span>' : '') + '</span>';
       html += '<span class="lb-score">🔥 ' + esc(s.streak) + '</span></div>';
     });
+    // If you're on the board but below the top 5, show your standing
+    if (myRank >= 5) {
+      const pct = Math.max(1, Math.round(((myRank + 1) / streaks.length) * 100));
+      html += '<div class="lb-row" style="background:var(--jab-tint);border-radius:6px;margin-top:2px;">' +
+        '<span class="lb-rank">' + (myRank + 1) + '</span>' +
+        '<span class="lb-name">' + esc(myName) + ' <span style="color:var(--jab);font-size:0.7rem;">(you)</span></span>' +
+        '<span class="lb-score">🔥 ' + esc(streaks[myRank].streak) + '</span></div>';
+      html += '<div style="font-size:0.66rem;color:var(--muted);text-align:center;margin-top:3px;">You\'re #' + (myRank + 1) + ' of ' + streaks.length + ' · top ' + pct + '%</div>';
+    } else if (myRank >= 0) {
+      html += '<div style="font-size:0.66rem;color:var(--muted);text-align:center;margin-top:3px;">You\'re #' + (myRank + 1) + ' of ' + streaks.length + ' 🔥</div>';
+    }
+    if (myRank >= 0) html += '<div style="text-align:center;margin-top:6px;"><button class="btn-secondary btn-sm" style="font-size:0.72rem;" onclick="shareMyRank(this)">Share my rank</button></div>';
   }
 
   // Top scores
@@ -3569,30 +3598,40 @@ function shareDailyResult() {
     '\u{1F525} ' + streak + ' streak\n' +
     'wordjab.io';
 
-  const btn = document.getElementById('daily-share-btn');
-  const showCopied = () => {
+  copyToClipboard(text, document.getElementById('daily-share-btn'), 'Copied!');
+}
+
+// Reusable clipboard copy with a transient button label swap.
+function copyToClipboard(text, btn, okLabel) {
+  const done = () => {
     if (!btn) return;
     const orig = btn.textContent;
-    btn.textContent = 'Copied!';
+    btn.textContent = okLabel || 'Copied!';
     setTimeout(() => { btn.textContent = orig; }, 1500);
   };
-
-  const fallbackCopy = () => {
+  const fallback = () => {
     const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.position = 'fixed';
-    ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.select();
-    try { document.execCommand('copy'); showCopied(); } catch(e) {}
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); done(); } catch(e) {}
     document.body.removeChild(ta);
   };
-
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).then(showCopied).catch(fallbackCopy);
-  } else {
-    fallbackCopy();
-  }
+    navigator.clipboard.writeText(text).then(done).catch(fallback);
+  } else fallback();
+}
+
+function shareMyRank(btn) {
+  const cached = getCachedLeaderboard();
+  const streaks = ((cached && cached.record && cached.record.dailyStreaks) || [])
+    .slice().sort((a, b) => (b.streak || 0) - (a.streak || 0));
+  const myName = getSavedPlayerName();
+  const rank = myName ? streaks.findIndex(s => (s.name || '').toLowerCase() === myName.toLowerCase()) : -1;
+  if (rank < 0) { if (btn) { const o = btn.textContent; btn.textContent = 'Post a streak first'; setTimeout(() => btn.textContent = o, 1500); } return; }
+  const text = 'WordJab 🥊 Daily Streak board\n' +
+    "I'm #" + (rank + 1) + ' of ' + streaks.length + ' — 🔥 ' + streaks[rank].streak + ' streak!\n' +
+    'wordjab.io';
+  copyToClipboard(text, btn, 'Copied!');
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -3677,21 +3716,151 @@ function setLoungeFeedback(msg) {
   if (el) el.textContent = msg || '';
 }
 
+// ── Friends ───────────────────────────────────────────────────────────────────
+// Friends are reserved names you save. When a friend is in the Lounge they show
+// as online here with a one-tap Challenge.
+const FRIENDS_KEY = 'wj_friends';
+let friendPresence = {}; // nameLower -> uid, refreshed from lounge presence
+
+function getFriends() { try { return JSON.parse(localStorage.getItem(FRIENDS_KEY) || '[]'); } catch(e) { return []; } }
+function isFriend(name) { return getFriends().some(f => f.toLowerCase() === String(name || '').toLowerCase()); }
+function addFriend(name) {
+  name = String(name || '').trim();
+  if (!name || handleError(name)) return;
+  const me = getSavedPlayerName();
+  if (me && name.toLowerCase() === me.toLowerCase()) return; // can't friend yourself
+  const f = getFriends();
+  if (!f.some(x => x.toLowerCase() === name.toLowerCase())) {
+    f.push(name);
+    try { localStorage.setItem(FRIENDS_KEY, JSON.stringify(f.slice(0, 100))); } catch(e) {}
+  }
+  renderFriends(); renderLoungeMembers();
+}
+function removeFriend(name) {
+  const f = getFriends().filter(x => x.toLowerCase() !== String(name).toLowerCase());
+  try { localStorage.setItem(FRIENDS_KEY, JSON.stringify(f)); } catch(e) {}
+  renderFriends(); renderLoungeMembers();
+}
+function addFriendFromInput() {
+  const input = document.getElementById('friend-add-input');
+  if (!input) return;
+  addFriend(input.value);
+  input.value = '';
+}
+
+// Who's present in the lounge right now → nameLower: uid
+function loungePresenceMap() {
+  if (inLounge && loungeMembers.length) {
+    const m = {};
+    loungeMembers.forEach(x => { m[(x.handle || '').toLowerCase()] = x.uid; });
+    return m;
+  }
+  return friendPresence;
+}
+
+// When not in the lounge, peek at who's there via Ably's REST presence API
+// so friends can still show as online.
+async function fetchFriendPresence() {
+  if (inLounge) return; // live member list already drives it
+  if (getFriends().length === 0) return;
+  try {
+    const res = await fetch('https://rest.ably.io/channels/' + LOUNGE_CHANNEL + '/presence', {
+      headers: { 'Authorization': 'Basic ' + btoa(ABLY_KEY) }
+    });
+    if (!res.ok) return;
+    const arr = await res.json();
+    const map = {};
+    (arr || []).forEach(m => { const h = m.data && m.data.handle; if (h) map[String(h).toLowerCase()] = m.clientId; });
+    friendPresence = map;
+    renderFriends();
+  } catch(e) {}
+}
+
+function renderFriends() {
+  const card = document.getElementById('friends-card');
+  const list = document.getElementById('friends-list');
+  if (!card || !list) return;
+  const friends = getFriends();
+  // Only surface the card once the player has engaged (claimed a name or added a friend)
+  if (friends.length === 0 && !getIdentity() && !inLounge) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  const presence = loungePresenceMap();
+  const onlineCount = friends.filter(f => presence[f.toLowerCase()]).length;
+  const badge = document.getElementById('friends-online-badge');
+  if (badge) badge.textContent = onlineCount > 0 ? ('🟢 ' + onlineCount + ' online') : '';
+  if (friends.length === 0) {
+    list.innerHTML = '<div class="lounge-empty">No friends yet — add players by name below, or tap ⭐ next to anyone in the Lounge.</div>';
+    return;
+  }
+  // Online first
+  const sorted = friends.slice().sort((a, b) => (presence[b.toLowerCase()] ? 1 : 0) - (presence[a.toLowerCase()] ? 1 : 0));
+  list.innerHTML = '';
+  sorted.forEach(name => {
+    const uid = presence[name.toLowerCase()];
+    const online = !!uid;
+    const row = document.createElement('div');
+    row.className = 'lounge-row';
+    const dot = document.createElement('div');
+    dot.className = 'lounge-dot ' + (online ? 'looking' : '');
+    if (!online) dot.style.background = 'var(--line)';
+    const nm = document.createElement('span');
+    nm.className = 'lounge-name';
+    nm.textContent = name;
+    const status = document.createElement('span');
+    status.className = 'lounge-status';
+    status.textContent = online ? 'in lounge' : 'offline';
+    row.appendChild(dot); row.appendChild(nm); row.appendChild(status);
+    if (online && inLounge && uid) {
+      const ch = document.createElement('button');
+      ch.className = 'lounge-challenge-btn';
+      ch.textContent = 'Challenge';
+      ch.disabled = !!outgoingChallenge || (challengeCooldowns[uid] || 0) > Date.now();
+      ch.onclick = () => sendChallenge(uid, name);
+      row.appendChild(ch);
+    } else if (online && !inLounge) {
+      const hint = document.createElement('span');
+      hint.className = 'lounge-status';
+      hint.style.color = 'var(--jab-soft)';
+      hint.textContent = 'step in to challenge';
+      row.appendChild(hint);
+    }
+    const rm = document.createElement('button');
+    rm.className = 'lounge-block-btn';
+    rm.textContent = '✕';
+    rm.title = 'Remove friend';
+    rm.setAttribute('aria-label', 'Remove ' + name);
+    rm.onclick = () => removeFriend(name);
+    row.appendChild(rm);
+    list.appendChild(row);
+  });
+}
+
 async function enterLounge() {
   const input = document.getElementById('lounge-handle');
   const handle = input.value.trim();
   const err = handleError(handle);
   setLoungeFeedback('');
   if (err) { setLoungeFeedback(err); return; }
-  const id = saveIdentity(handle);
   const btn = document.getElementById('lounge-enter-btn');
   btn.textContent = 'Connecting...'; btn.disabled = true;
+
+  // Reserve the name so it's yours (same claim as the daily streak board).
+  // Network hiccups shouldn't block entry — only a hard "taken" does.
+  const reg = await apiPostJson('/register', { name: handle, secret: mySecret() });
+  if (reg && reg.status === 409) {
+    setLoungeFeedback('That name is taken — pick another.');
+    btn.textContent = 'Step in'; btn.disabled = false;
+    return;
+  }
+
+  const id = saveIdentity(handle);
   try {
     await connectLounge(id);
     inLounge = true;
     document.getElementById('lounge-setup').style.display = 'none';
     document.getElementById('lounge-room').style.display = 'block';
     document.getElementById('lounge-you').textContent = id.handle;
+    renderFriends();
   } catch(e) {
     setLoungeFeedback('Could not connect. Check your connection and try again.');
   }
@@ -3759,6 +3928,7 @@ async function refreshLoungeMembers() {
       status: (m.data && m.data.status === 'in-game') ? 'in-game' : 'looking'
     }));
     renderLoungeMembers();
+    renderFriends(); // reflect friends' online status from the live member list
   } catch(e) {}
 }
 
@@ -3801,13 +3971,20 @@ function renderLoungeMembers() {
       btn.disabled = m.status !== 'looking' || !!outgoingChallenge || (challengeCooldowns[m.uid] || 0) > Date.now();
       btn.onclick = () => sendChallenge(m.uid, m.handle);
     }
+    const star = document.createElement('button');
+    star.className = 'lounge-block-btn';
+    const friended = isFriend(m.handle);
+    star.textContent = friended ? '⭐' : '☆';
+    star.title = friended ? 'Remove friend' : 'Add friend';
+    star.setAttribute('aria-label', (friended ? 'Remove ' : 'Add ') + m.handle + ' as friend');
+    star.onclick = () => { friended ? removeFriend(m.handle) : addFriend(m.handle); };
     const block = document.createElement('button');
     block.className = 'lounge-block-btn';
     block.textContent = '🚫';
     block.title = 'Block ' + m.handle;
     block.setAttribute('aria-label', 'Block ' + m.handle);
     block.onclick = () => { if (confirm('Block ' + m.handle + '? You won\'t see them or their challenges again on this device.')) blockLoungeUid(m.uid); };
-    row.appendChild(dot); row.appendChild(name); row.appendChild(status); row.appendChild(btn); row.appendChild(block);
+    row.appendChild(dot); row.appendChild(name); row.appendChild(status); row.appendChild(btn); row.appendChild(star); row.appendChild(block);
     el.appendChild(row);
   });
 }
@@ -3969,6 +4146,8 @@ function initLounge() {
   const id = getIdentity();
   if (id) document.getElementById('lounge-handle').value = id.handle;
   fetchLoungeOccupancy();
+  renderFriends();
+  fetchFriendPresence();
 }
 
 // Init local player slots
