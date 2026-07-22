@@ -578,6 +578,7 @@
           onkeydown="if(event.key==='Enter') enterLounge()">
         <button id="lounge-enter-btn" onclick="enterLounge()">Step in</button>
       </div>
+      <div style="text-align:center;margin-top:4px;"><a href="#" id="lounge-name-change" onclick="unlockNameInput('lounge-handle');return false;" style="display:none;font-size:0.68rem;color:var(--muted);">not you? change name</a></div>
     </div>
     <div id="lounge-room" style="display:none;">
       <div style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:var(--muted);margin-bottom:0.5rem;">
@@ -981,12 +982,13 @@
     <div class="tiles" id="daily-result-tiles" style="justify-content:center;margin-bottom:1rem;"></div>
     <div class="streak-row" id="daily-streak-row"></div>
     <div id="daily-streak-post" style="margin-top:1rem;padding-top:0.9rem;border-top:0.5px solid var(--line);">
-      <p style="font-size:0.72rem;color:var(--muted);margin-bottom:0.5rem;">Claim your name &amp; save your streak to the global board</p>
+      <p id="daily-streak-post-label" style="font-size:0.72rem;color:var(--muted);margin-bottom:0.5rem;">Claim your name &amp; save your streak to the global board</p>
       <div class="lb-key-row" style="justify-content:center;">
         <input type="text" id="daily-streak-name" placeholder="your name" maxlength="16" autocomplete="off"
           onkeydown="if(event.key==='Enter') postDailyStreak()">
         <button onclick="postDailyStreak()" id="daily-streak-post-btn">Save 🔥</button>
       </div>
+      <div style="text-align:center;margin-top:4px;"><a href="#" id="daily-name-change" onclick="unlockNameInput('daily-streak-name');return false;" style="display:none;font-size:0.68rem;color:var(--muted);">not you? change name</a></div>
       <div id="daily-streak-post-msg" aria-live="polite" style="font-size:0.72rem;color:var(--jab-soft);min-height:1rem;margin-top:0.4rem;"></div>
     </div>
   </div>
@@ -3201,6 +3203,12 @@ async function loadSharedLeaderboard() {
   }
 }
 
+// UTC week index since 2024-01-01, matching the Worker's clock
+function currentWeekIndex() {
+  const day = Math.floor((Date.now() - Date.UTC(2024, 0, 1)) / 86400000);
+  return Math.floor(day / 7);
+}
+
 function renderLeaderboardHtml(record, stale) {
   record = record || {};
   let html = '';
@@ -3209,9 +3217,33 @@ function renderLeaderboardHtml(record, stale) {
       '<a href="#" onclick="loadSharedLeaderboard();return false;" style="color:var(--jab);">refresh</a></div>';
   }
 
+  const myName = getSavedPlayerName();
+
+  // ── This week's top solvers (resets every week — fresh competition) ──
+  const wk = (record.weekly && record.weekly.weekIndex === currentWeekIndex())
+    ? (record.weekly.entries || []).slice().sort((a, b) => (b.wins || 0) - (a.wins || 0))
+    : [];
+  const myWk = myName ? wk.findIndex(e => (e.name || '').toLowerCase() === myName.toLowerCase()) : -1;
+  html += '<div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;"><span aria-hidden="true">🗓</span> this week\'s top solvers</div>';
+  if (wk.length === 0) {
+    html += '<div class="lb-empty" style="padding:0.5rem 0;">Fresh week — solve today\'s Daily Jab and be the first on the board!</div>';
+  } else {
+    const rl = ['gold','silver','bronze'];
+    wk.slice(0, 5).forEach((e, i) => {
+      const mine = myWk === i;
+      html += '<div class="lb-row"' + (mine ? ' style="background:var(--jab-tint);border-radius:6px;"' : '') + '><span class="lb-rank ' + (rl[i] || '') + '">' + (i+1) + '</span>';
+      html += '<span class="lb-name">' + esc(e.name) + (mine ? ' <span style="color:var(--jab);font-size:0.7rem;">(you)</span>' : '') + '</span>';
+      html += '<span class="lb-score">' + esc(e.wins) + '/7</span></div>';
+    });
+    if (myWk >= 5) {
+      html += '<div class="lb-row" style="background:var(--jab-tint);border-radius:6px;margin-top:2px;"><span class="lb-rank">' + (myWk+1) + '</span>' +
+        '<span class="lb-name">' + esc(myName) + ' <span style="color:var(--jab);font-size:0.7rem;">(you)</span></span>' +
+        '<span class="lb-score">' + esc(wk[myWk].wins) + '/7</span></div>';
+    }
+  }
+
   // Top daily streaks — with the viewer's own rank + percentile
   const streaks = (record.dailyStreaks || []).slice().sort((a, b) => (b.streak || 0) - (a.streak || 0));
-  const myName = getSavedPlayerName();
   const myRank = myName ? streaks.findIndex(s => (s.name || '').toLowerCase() === myName.toLowerCase()) : -1;
   html += '<div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;"><span aria-hidden="true">🔥</span> longest daily streaks</div>';
   if (streaks.length === 0) {
@@ -3513,8 +3545,12 @@ function showDailyResultScreen(won, word, roundsLeft, state) {
   if (postWrap) {
     const playedToday = state.lastPlayedDate === todayStr();
     postWrap.style.display = (hasBackend() && playedToday && (state.best || 0) > 0) ? 'block' : 'none';
-    const nameInput = document.getElementById('daily-streak-name');
-    if (nameInput && !nameInput.value) nameInput.value = getSavedPlayerName();
+    applyClaimedName('daily-streak-name', 'daily-name-change');
+    const claimed = getSavedPlayerName();
+    const lbl = document.getElementById('daily-streak-post-label');
+    if (lbl) lbl.textContent = claimed
+      ? 'Save your streak to the global board'
+      : 'Claim your name & save your streak to the global board';
     document.getElementById('daily-streak-post-msg').textContent = '';
     document.getElementById('daily-streak-post-btn').disabled = false;
     document.getElementById('daily-streak-post-btn').textContent = 'Save 🔥';
@@ -3552,6 +3588,7 @@ async function postDailyStreak() {
   try { r = await Promise.race([submitDaily(name, won), timeout]); } catch(e) { r = { ok: false }; }
   if (r && r.ok) {
     saveIdentity(name); // remember the claimed name (shared with the lounge)
+    applyClaimedName('daily-streak-name', 'daily-name-change');
     msg.style.color = 'var(--jab-soft)';
     msg.textContent = r.already
       ? ("Already saved today — 🔥 " + r.best + " best.")
@@ -3680,6 +3717,35 @@ function saveIdentity(handle) {
   try { localStorage.setItem(IDENTITY_KEY, JSON.stringify(id)); } catch(e) {}
   return id;
 }
+// Keep the player's claimed name consistent: once claimed, name inputs are
+// prefilled and read-only (no accidental typo-renames) with a deliberate
+// "change name" link. No login needed — the browser remembers who they are.
+function applyClaimedName(inputId, changeLinkId) {
+  const input = document.getElementById(inputId);
+  const link = document.getElementById(changeLinkId);
+  const claimed = getSavedPlayerName();
+  if (!input) return;
+  if (claimed) {
+    input.value = claimed;
+    input.readOnly = true;
+    input.style.opacity = '0.85';
+    if (link) link.style.display = 'inline';
+  } else {
+    input.readOnly = false;
+    input.style.opacity = '1';
+    if (link) link.style.display = 'none';
+  }
+}
+function unlockNameInput(inputId) {
+  if (!confirm('Change your player name? Your streaks and friends are tied to your current name — changing it starts a new one.')) return;
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  input.readOnly = false;
+  input.style.opacity = '1';
+  input.value = '';
+  input.focus();
+}
+
 // One stable secret per browser — reused whether or not a name is claimed yet,
 // so the secret used to /register a name matches the one stored with it.
 function mySecret() {
@@ -4143,8 +4209,7 @@ async function fetchLoungeOccupancy() {
 }
 
 function initLounge() {
-  const id = getIdentity();
-  if (id) document.getElementById('lounge-handle').value = id.handle;
+  applyClaimedName('lounge-handle', 'lounge-name-change');
   fetchLoungeOccupancy();
   renderFriends();
   fetchFriendPresence();
