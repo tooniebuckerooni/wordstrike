@@ -1,5 +1,5 @@
 // WordJab service worker — bump CACHE version when shipping breaking changes
-const CACHE = 'wordjab-v1';
+const CACHE = 'wordjab-v2';
 const PRECACHE = [
   '/',
   '/icon-192.png',
