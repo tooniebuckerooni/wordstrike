@@ -3203,10 +3203,9 @@ async function loadSharedLeaderboard() {
   }
 }
 
-// UTC week index since 2024-01-01, matching the Worker's clock
+// Local week index, matching the local-day basis the Worker now uses
 function currentWeekIndex() {
-  const day = Math.floor((Date.now() - Date.UTC(2024, 0, 1)) / 86400000);
-  return Math.floor(day / 7);
+  return Math.floor(localDayNumber() / 7);
 }
 
 function renderLeaderboardHtml(record, stale) {
@@ -3374,6 +3373,13 @@ function dailyDayNumber() {
   const today = new Date(); today.setHours(0,0,0,0);
   const epoch = new Date(DAILY_EPOCH); epoch.setHours(0,0,0,0);
   return Math.floor((today - epoch) / 86400000) + 1;
+}
+// Whole days since 2024-01-01 in the PLAYER'S LOCAL time. The daily word and
+// streaks are local-day based, so we send this to the server (which used to
+// count in UTC, breaking streaks for players hours away from UTC).
+function localDayNumber() {
+  const offsetMs = new Date().getTimezoneOffset() * 60000;
+  return Math.floor((Date.now() - offsetMs - Date.UTC(2024, 0, 1)) / 86400000);
 }
 
 function getDailyState() {
@@ -3616,7 +3622,7 @@ async function submitDaily(name, won) {
   if (!reg) return { ok: false };
   if (reg.status === 409) return { ok: false, taken: true };
   if (!reg.ok) return { ok: false };
-  const d = await apiPostJson('/daily', { name, secret, won });
+  const d = await apiPostJson('/daily', { name, secret, won, day: localDayNumber() });
   if (!d || !d.ok) return { ok: false };
   return { ok: true, streak: d.data.streak || 0, best: d.data.best || 0, already: !!d.data.already };
 }
