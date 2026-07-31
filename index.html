@@ -4475,8 +4475,14 @@ async function corrGuess(letter) {
   const tb = corrGame.players[corrTarget];
   const lc = letter.toLowerCase();
   if (tb) {
-    const revealed = tb.tiles.some(t => t.revealed && t.char && t.char.toLowerCase() === lc);
-    if (revealed || (tb.wrong || []).includes(lc)) return;
+    if (lc === ' ') {
+      // Blanks reveal one at a time — only a missed blank (recorded in `wrong`)
+      // proves the padding is all gone, so don't block on an already-shown blank.
+      if ((tb.wrong || []).includes(' ')) return;
+    } else {
+      const revealed = tb.tiles.some(t => t.revealed && t.char && t.char.toLowerCase() === lc);
+      if (revealed || (tb.wrong || []).includes(lc)) return;
+    }
   }
   corrBusy = true;
   setFeedbackEl('corr-feedback', 'Jabbing…', '');
@@ -4708,6 +4714,16 @@ function renderCorrLetters(target) {
     b.onclick = () => corrGuess(l);
     lg.appendChild(b);
   });
+  // Blank/space button — needed to clear padding tiles when a word is shorter
+  // than the board, or you could never finish cracking it. Blanks reveal one at
+  // a time; a missed blank (recorded in the target's `wrong`) means none remain.
+  const bb = document.createElement('button');
+  bb.className = 'blank-btn';
+  bb.textContent = 'SPACE / BLANK';
+  const blankDry = wrong.includes(' ');
+  if (!canPlay || blankDry) bb.disabled = true;
+  bb.onclick = () => corrGuess(' ');
+  lg.appendChild(bb);
 }
 
 // ── "Your matches" list + turn badge (and tab-title unread count) ────────────

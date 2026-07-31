@@ -190,10 +190,15 @@ function corrApplyGuess(game, letter, targetIdx) {
   if (!/^[a-z ]$/.test(lc)) return { error: 'bad-letter' };
   if (!target.wrong) target.wrong = [];
   const alreadyRevealed = target.tiles.some(t => t.revealed && t.char && t.char.toLowerCase() === lc);
-  // A real letter can only be thrown at a given board once. Spaces are exempt:
-  // blanks reveal one-at-a-time, so you must be able to keep jabbing spaces to
-  // clear padding (the same as the live game, which never locks repeated spaces).
-  if (lc !== ' ' && (alreadyRevealed || target.wrong.includes(lc))) return { error: 'dup' };
+  // A real letter can only be thrown at a given board once. Blanks are special:
+  // they reveal one-at-a-time, so repeated space guesses are allowed until one
+  // MISSES (which records ' ' in `wrong`) — proving the padding is exhausted.
+  // This matches the live game, which keeps the blank button live until a miss.
+  if (lc === ' ') {
+    if (target.wrong.includes(' ')) return { error: 'dup' };
+  } else if (alreadyRevealed || target.wrong.includes(lc)) {
+    return { error: 'dup' };
+  }
 
   let hitIdxs = [];
   target.tiles.forEach((t, i) => {
@@ -219,7 +224,9 @@ function corrApplyGuess(game, letter, targetIdx) {
       game.lastMove = { by: guesser.name, letter: lc, result: 'hit', targetIdx, targetName: target.name, revealedIdxs: hitIdxs };
     }
   } else {
-    if (lc !== ' ') target.wrong.push(lc);
+    // Record every miss — including a missed blank, which marks the padding dry
+    // so the blank can't be thrown at this board again.
+    target.wrong.push(lc);
     game.turn = corrNextTurn(game, gi);
     game.lastMove = { by: guesser.name, letter: lc, result: 'miss', targetIdx, targetName: target.name, revealedIdxs: [] };
   }
