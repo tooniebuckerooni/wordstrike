@@ -366,6 +366,16 @@
   .lb-key-row input { flex: 1; font-size: 0.8rem; padding: 0.4rem 0.6rem; }
   .lb-key-row button { font-size: 0.78rem; padding: 0.4rem 0.75rem; background: var(--jab); color: #1a1106; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; }
   .lb-empty { text-align: center; color: var(--muted); font-size: 0.8rem; padding: 1rem 0; }
+  .corr-match-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    width: 100%; text-align: left; padding: 8px 10px; margin-bottom: 5px;
+    background: var(--surface-raised); border: 0.5px solid var(--line);
+    border-radius: 8px; cursor: pointer; font-family: 'Work Sans', sans-serif;
+    color: var(--paper); font-size: 0.82rem;
+  }
+  .corr-match-row:hover { border-color: var(--jab); }
+  .corr-match-row .cm-opp { font-weight: 600; }
+  .corr-match-row .cm-label { font-size: 0.76rem; white-space: nowrap; }
   .donate-strip {
     text-align: center; padding: 0.6rem 0 0.25rem;
   }
@@ -565,6 +575,18 @@
       <h3>Practice vs the Bot</h3>
       <p>No friends around? Spar a round against JabBot.</p>
     </div>
+  </div>
+  <div class="card" id="corr-card">
+    <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:0.3rem;">
+      <h2 style="font-family:'Anton',sans-serif;font-size:0.95rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted-2);">📮 Play by Mail</h2>
+      <span id="corr-turn-badge" style="font-size:0.72rem;color:var(--jab-soft);font-weight:600;"></span>
+    </div>
+    <p style="font-size:0.78rem;color:var(--muted);margin-bottom:0.75rem;">Turn-by-turn matches that survive everyone leaving. Make your move, close the app, come back when it's your turn — no staying connected, no getting dropped.</p>
+    <div class="btn-row" style="margin-top:0;">
+      <button class="btn-primary btn-sm" onclick="openCorrNew()" style="flex:1;">✉️ New match</button>
+      <button class="btn-secondary btn-sm" onclick="openCorrJoin()" style="flex:1;">Join by code</button>
+    </div>
+    <div id="corr-list" aria-live="polite" style="margin-top:0.75rem;"></div>
   </div>
   <div class="card" id="lounge-card">
     <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:0.3rem;">
@@ -995,6 +1017,70 @@
   <div class="btn-row">
     <button class="btn-secondary" id="daily-share-btn" onclick="shareDailyResult()" style="flex:1;">Share result</button>
     <button class="btn-primary" onclick="showScreen('screen-home');renderDailyHomeBadge();" style="flex:1;">&larr; Back home</button>
+  </div>
+</div>
+
+<!-- CORRESPONDENCE — NEW MATCH -->
+<div id="screen-corr-setup" class="screen">
+  <div class="card">
+    <h2 style="font-size:1.1rem;color:var(--jab);margin-bottom:0.35rem;">✉️ New match by mail</h2>
+    <p style="color:var(--muted);font-size:0.82rem;margin-bottom:1rem;">Hide your word, get a 4-letter code, and share it. Your opponent can jab back any time — nobody has to stay connected.</p>
+    <label for="corr-setup-name">Your fight name</label>
+    <input type="text" id="corr-setup-name" placeholder="your fight name" maxlength="16" autocomplete="off">
+    <div style="text-align:right;margin:-4px 0 8px;"><a href="#" id="corr-setup-name-change" onclick="unlockNameInput('corr-setup-name');return false;" style="display:none;font-size:0.68rem;color:var(--muted);">not you? change name</a></div>
+    <label for="corr-setup-len">Board size (characters, including spaces)</label>
+    <input type="number" id="corr-setup-len" value="10" min="4" max="30">
+    <label for="corr-setup-word">Your secret word or phrase</label>
+    <input type="text" id="corr-setup-word" placeholder="nobody else can see this" maxlength="30" autocomplete="off" autocapitalize="none"
+      onkeydown="if(event.key==='Enter') corrCreateMatch()">
+    <div class="feedback" id="corr-setup-err" aria-live="polite"></div>
+  </div>
+  <div class="btn-row">
+    <button class="btn-secondary" onclick="showScreen('screen-home')">&larr; Back</button>
+    <button class="btn-primary" id="corr-create-btn" onclick="corrCreateMatch()" style="flex:1;">Create match &rarr;</button>
+  </div>
+</div>
+
+<!-- CORRESPONDENCE — JOIN BY CODE -->
+<div id="screen-corr-join" class="screen">
+  <div class="card">
+    <h2 style="font-size:1.1rem;color:var(--jab);margin-bottom:0.35rem;">Join a match by mail</h2>
+    <p style="color:var(--muted);font-size:0.82rem;margin-bottom:1rem;">Enter the code a friend sent you and hide your own word. Your word is trimmed to fit the board size the host picked.</p>
+    <label for="corr-join-name">Your fight name</label>
+    <input type="text" id="corr-join-name" placeholder="your fight name" maxlength="16" autocomplete="off">
+    <div style="text-align:right;margin:-4px 0 8px;"><a href="#" id="corr-join-name-change" onclick="unlockNameInput('corr-join-name');return false;" style="display:none;font-size:0.68rem;color:var(--muted);">not you? change name</a></div>
+    <label for="corr-join-code">Match code</label>
+    <input type="text" id="corr-join-code" placeholder="4-letter code" maxlength="4" autocomplete="off"
+      style="text-transform:uppercase;letter-spacing:0.3em;font-weight:700;">
+    <label for="corr-join-word">Your secret word or phrase</label>
+    <input type="text" id="corr-join-word" placeholder="nobody else can see this" maxlength="30" autocomplete="off" autocapitalize="none"
+      onkeydown="if(event.key==='Enter') corrJoinMatch()">
+    <div class="feedback" id="corr-join-err" aria-live="polite"></div>
+  </div>
+  <div class="btn-row">
+    <button class="btn-secondary" onclick="showScreen('screen-home')">&larr; Back</button>
+    <button class="btn-primary" id="corr-join-btn" onclick="corrJoinMatch()" style="flex:1;">Join match &rarr;</button>
+  </div>
+</div>
+
+<!-- CORRESPONDENCE — GAME -->
+<div id="screen-corr-game" class="screen">
+  <div class="turn-banner" aria-live="polite" id="corr-turn-banner">Loading…</div>
+  <div id="corr-share" class="card" style="display:none;text-align:center;">
+    <p style="color:var(--muted);font-size:0.82rem;margin-bottom:0.4rem;">Share this code with your opponent:</p>
+    <div style="font-family:'Anton',sans-serif;font-size:2rem;letter-spacing:0.35em;color:var(--jab);" id="corr-share-code"></div>
+    <button class="btn-secondary btn-sm" style="margin-top:0.5rem;" onclick="corrShareCode(this)">Copy invite link</button>
+  </div>
+  <div class="last-move-banner" id="corr-last-move" aria-live="polite" style="display:none;"></div>
+  <div id="corr-boards"></div>
+  <div class="action-panel" id="corr-action-panel">
+    <h3 id="corr-action-heading">Throw a letter</h3>
+    <div class="letter-grid" id="corr-letters"></div>
+    <div class="feedback" id="corr-feedback" aria-live="polite"></div>
+  </div>
+  <div class="btn-row" style="margin-top:0.5rem;">
+    <button class="btn-secondary" onclick="leaveCorrGame()" style="flex:1;">&larr; My matches</button>
+    <button class="btn-secondary btn-sm" id="corr-resign-btn" onclick="corrResignMatch()">Resign</button>
   </div>
 </div>
 
@@ -4227,12 +4313,382 @@ function initLounge() {
   fetchFriendPresence();
 }
 
+// ── Correspondence (async, turn-by-turn play) ───────────────────────────────
+// Server-authoritative games that live in the Worker's KV, not a host browser,
+// so they survive everyone leaving — and can't be disconnected out of. The
+// client is a thin view: it POSTs moves and renders whatever redacted state the
+// Worker returns (opponent's unrevealed letters come back as null).
+let corrGame = null;         // current redacted game object from the Worker
+let corrGameId = null;       // id of the game currently open
+let corrPollTimer = null;    // polls /corr/state while the game screen is open
+let corrListTimer = null;    // periodic "your matches" refresh on home
+let corrBusy = false;        // guard against double-submits
+const CORR_ACTIVE_KEY = 'wj_corr_active';
+
+function corrSetActive(id) {
+  try { id ? localStorage.setItem(CORR_ACTIVE_KEY, id) : localStorage.removeItem(CORR_ACTIVE_KEY); } catch(e) {}
+}
+
+function openCorrNew() {
+  setFeedbackEl('corr-setup-err', '', '');
+  document.getElementById('corr-setup-word').value = '';
+  showScreen('screen-corr-setup');
+  applyClaimedName('corr-setup-name', 'corr-setup-name-change');
+}
+function openCorrJoin() {
+  setFeedbackEl('corr-join-err', '', '');
+  document.getElementById('corr-join-code').value = '';
+  document.getElementById('corr-join-word').value = '';
+  showScreen('screen-corr-join');
+  applyClaimedName('corr-join-name', 'corr-join-name-change');
+}
+
+async function corrCreateMatch() {
+  if (corrBusy) return;
+  const name = document.getElementById('corr-setup-name').value.trim();
+  const len = clampInt(document.getElementById('corr-setup-len').value, 4, 30, 10);
+  const word = document.getElementById('corr-setup-word').value.trim();
+  const nameErr = handleError(name);
+  if (nameErr) { setFeedbackEl('corr-setup-err', nameErr, 'wrong'); return; }
+  if (!word) { setFeedbackEl('corr-setup-err', 'Enter your secret word.', 'wrong'); return; }
+  if (word.replace(/\s+/g,'').length < 1) { setFeedbackEl('corr-setup-err', 'Enter your secret word.', 'wrong'); return; }
+  if (!hasBackend()) { setFeedbackEl('corr-setup-err', 'Correspondence needs a connection — try again.', 'wrong'); return; }
+
+  const btn = document.getElementById('corr-create-btn');
+  btn.disabled = true; btn.textContent = 'Checking word…'; corrBusy = true;
+  for (const w of word.split(/\s+/).filter(Boolean)) {
+    if (!await checkWord(w)) {
+      setFeedbackEl('corr-setup-err', '"' + w + '" doesn\'t look like a real word.', 'wrong');
+      btn.disabled = false; btn.textContent = 'Create match →'; corrBusy = false; return;
+    }
+  }
+  btn.textContent = 'Creating…';
+  const r = await apiPostJson('/corr/create', { name, secret: mySecret(), word, charCount: len, day: localDayNumber() });
+  btn.disabled = false; btn.textContent = 'Create match →'; corrBusy = false;
+  if (r && r.status === 409 && r.data && r.data.taken) {
+    setFeedbackEl('corr-setup-err', 'That name is taken — pick another.', 'wrong'); return;
+  }
+  if (!r || !r.ok || !r.data.game) {
+    setFeedbackEl('corr-setup-err', "Couldn't create the match — try again.", 'wrong'); return;
+  }
+  saveIdentity(name);
+  sfx('lock');
+  openCorrGame(r.data.game);
+}
+
+async function corrJoinMatch() {
+  if (corrBusy) return;
+  const name = document.getElementById('corr-join-name').value.trim();
+  const code = document.getElementById('corr-join-code').value.trim().toUpperCase();
+  const word = document.getElementById('corr-join-word').value.trim();
+  const nameErr = handleError(name);
+  if (nameErr) { setFeedbackEl('corr-join-err', nameErr, 'wrong'); return; }
+  if (code.length !== 4) { setFeedbackEl('corr-join-err', 'Enter the 4-letter code.', 'wrong'); return; }
+  if (!word) { setFeedbackEl('corr-join-err', 'Enter your secret word.', 'wrong'); return; }
+  if (!hasBackend()) { setFeedbackEl('corr-join-err', 'Correspondence needs a connection — try again.', 'wrong'); return; }
+
+  const btn = document.getElementById('corr-join-btn');
+  btn.disabled = true; btn.textContent = 'Checking word…'; corrBusy = true;
+  for (const w of word.split(/\s+/).filter(Boolean)) {
+    if (!await checkWord(w)) {
+      setFeedbackEl('corr-join-err', '"' + w + '" doesn\'t look like a real word.', 'wrong');
+      btn.disabled = false; btn.textContent = 'Join match →'; corrBusy = false; return;
+    }
+  }
+  btn.textContent = 'Joining…';
+  const r = await apiPostJson('/corr/join', { name, secret: mySecret(), code, word, day: localDayNumber() });
+  btn.disabled = false; btn.textContent = 'Join match →'; corrBusy = false;
+  if (r && r.status === 409 && r.data && r.data.taken) { setFeedbackEl('corr-join-err', 'That name is taken — pick another.', 'wrong'); return; }
+  if (r && r.data && r.data.error === 'self') { setFeedbackEl('corr-join-err', "That's your own match — share the code with someone else.", 'wrong'); return; }
+  if (r && r.data && r.data.error === 'full') { setFeedbackEl('corr-join-err', 'That match already has two players.', 'wrong'); return; }
+  if (r && r.status === 404) { setFeedbackEl('corr-join-err', "No open match with that code. Check it and try again.", 'wrong'); return; }
+  if (!r || !r.ok || !r.data.game) { setFeedbackEl('corr-join-err', "Couldn't join — try again.", 'wrong'); return; }
+  saveIdentity(name);
+  sfx('lock');
+  openCorrGame(r.data.game);
+}
+
+function openCorrGame(game) {
+  corrGame = game;
+  corrGameId = game.id;
+  corrSetActive(game.id);
+  showScreen('screen-corr-game');
+  renderCorrGame();
+  startCorrPoll();
+}
+
+function leaveCorrGame() {
+  stopCorrPoll();
+  corrGame = null; corrGameId = null;
+  corrSetActive(null);
+  showScreen('screen-home');
+  refreshCorrList();
+}
+
+function startCorrPoll() {
+  stopCorrPoll();
+  corrPollTimer = setInterval(corrPoll, 4000);
+}
+function stopCorrPoll() {
+  if (corrPollTimer) { clearInterval(corrPollTimer); corrPollTimer = null; }
+}
+
+async function corrPoll() {
+  if (!corrGameId || document.getElementById('screen-corr-game').classList.contains('active') === false) { stopCorrPoll(); return; }
+  if (corrGame && corrGame.phase === 'finished') { stopCorrPoll(); return; }
+  const name = getSavedPlayerName();
+  if (!name) return;
+  const r = await apiPostJson('/corr/state', { name, secret: mySecret(), gameId: corrGameId }, 7000);
+  if (r && r.ok && r.data.game) {
+    const prev = corrGame ? corrGame.updatedTs : 0;
+    corrGame = r.data.game;
+    if (corrGame.updatedTs !== prev) {
+      if (corrGame.phase === 'active' && corrGame.yourTurn) sfx('turn');
+      renderCorrGame();
+    }
+  }
+}
+
+async function corrGuess(letter) {
+  if (corrBusy || !corrGame || corrGame.phase !== 'active' || !corrGame.yourTurn) return;
+  const mine = corrGame.players[corrGame.yourIndex];
+  const lc = letter.toLowerCase();
+  if (mine && (mine.guessed || []).includes(lc)) return;
+  corrBusy = true;
+  setFeedbackEl('corr-feedback', 'Jabbing…', '');
+  // Optimistically lock the grid so a double-tap can't double-submit.
+  document.getElementById('corr-action-panel').classList.add('locked');
+  const name = getSavedPlayerName();
+  const r = await apiPostJson('/corr/move', { name, secret: mySecret(), gameId: corrGameId, letter });
+  corrBusy = false;
+  if (r && r.data && r.data.game) {
+    corrGame = r.data.game;
+    const lm = corrGame.lastMove;
+    if (lm && lm.result === 'crack') { sfx('cracked'); setTimeout(() => sfx('eliminated'), 500); }
+    else if (lm && lm.result === 'hit') sfx('correct');
+    else if (lm && lm.result === 'miss') sfx('wrong');
+    renderCorrGame();
+  } else if (r && r.data && r.data.error === 'not-your-turn') {
+    if (r.data.game) { corrGame = r.data.game; renderCorrGame(); }
+  } else {
+    setFeedbackEl('corr-feedback', "Couldn't send that jab — try again.", 'wrong');
+    document.getElementById('corr-action-panel').classList.remove('locked');
+  }
+}
+
+async function corrResignMatch() {
+  if (!corrGame || corrGame.phase !== 'active') return;
+  if (!confirm('Resign this match? Your opponent wins.')) return;
+  const name = getSavedPlayerName();
+  const r = await apiPostJson('/corr/resign', { name, secret: mySecret(), gameId: corrGameId });
+  if (r && r.ok && r.data.game) { corrGame = r.data.game; renderCorrGame(); }
+}
+
+function corrShareCode(btn) {
+  if (!corrGame) return;
+  const link = 'https://wordjab.io/?corr=' + corrGame.code;
+  copyToClipboard(link, btn, 'Link copied!');
+}
+
+function renderCorrGame() {
+  if (!corrGame) return;
+  const g = corrGame;
+  const meIdx = g.yourIndex;
+  const oppIdx = meIdx === 0 ? 1 : 0;
+  const me = g.players[meIdx];
+  const opp = g.players[oppIdx];
+  const banner = document.getElementById('corr-turn-banner');
+  const share = document.getElementById('corr-share');
+  const panel = document.getElementById('corr-action-panel');
+  const resignBtn = document.getElementById('corr-resign-btn');
+
+  // Banner + share card by phase
+  share.style.display = 'none';
+  resignBtn.style.display = 'none';
+  if (g.phase === 'waiting') {
+    banner.textContent = 'Waiting for an opponent…';
+    document.getElementById('corr-share-code').textContent = g.code;
+    share.style.display = 'block';
+  } else if (g.phase === 'active') {
+    resignBtn.style.display = 'inline-block';
+    banner.textContent = g.yourTurn
+      ? ('Your jab — throw a letter at ' + (opp ? opp.name : 'your opponent'))
+      : ('Waiting for ' + (opp ? opp.name : 'your opponent') + ' to jab…');
+  } else { // finished
+    const iWon = g.winner && me && g.winner.toLowerCase() === me.name.toLowerCase();
+    const lm = g.lastMove;
+    if (lm && lm.result === 'resign') {
+      banner.textContent = (lm.by && me && lm.by.toLowerCase() === me.name.toLowerCase())
+        ? 'You resigned — ' + (opp ? opp.name : 'your opponent') + ' takes it.'
+        : (opp ? opp.name : 'Your opponent') + ' resigned — you win! 🏆';
+    } else {
+      banner.textContent = iWon
+        ? ('🏆 You cracked ' + (opp ? opp.name : 'their') + "'s word!")
+        : ((opp ? opp.name : 'Your opponent') + ' cracked your word.');
+    }
+  }
+
+  // Last move line
+  const lmEl = document.getElementById('corr-last-move');
+  if (g.lastMove && g.lastMove.letter && g.phase !== 'waiting') {
+    const lm = g.lastMove;
+    const who = (lm.by && me && lm.by.toLowerCase() === me.name.toLowerCase()) ? 'You' : esc(lm.by || '?');
+    const ll = lm.letter === ' ' ? 'SPACE' : String(lm.letter).toUpperCase();
+    let tail;
+    if (lm.result === 'crack') tail = '<span class="lm-result-correct">— cracked the board!</span>';
+    else if (lm.result === 'hit') tail = '<span class="lm-result-correct">— landed</span>';
+    else tail = '<span class="lm-result-wrong">— missed</span>';
+    lmEl.innerHTML = '<span class="lm-who">' + who + '</span> <span style="color:var(--muted);">jabbed</span> <span style="color:var(--paper);font-weight:500;">' + esc(ll) + '</span> ' + tail;
+    lmEl.style.display = 'flex';
+  } else { lmEl.style.display = 'none'; }
+
+  // Boards — opponent first (the one you attack), then yours
+  const bc = document.getElementById('corr-boards');
+  bc.innerHTML = '';
+  if (opp) bc.appendChild(corrBoardEl(opp, false, g.phase, oppIdx === g.turn));
+  if (me)  bc.appendChild(corrBoardEl(me, true, g.phase, meIdx === g.turn));
+
+  // Action panel — only live on your turn in an active game
+  const canPlay = g.phase === 'active' && g.yourTurn;
+  panel.style.display = g.phase === 'active' ? 'block' : 'none';
+  panel.classList.toggle('locked', !canPlay);
+  document.getElementById('corr-action-heading').textContent = canPlay
+    ? ('Throw a letter at ' + (opp ? opp.name : 'them'))
+    : 'Waiting for your turn…';
+  document.getElementById('corr-feedback').textContent = '';
+  document.getElementById('corr-feedback').className = 'feedback';
+  renderCorrLetters(opp, me);
+}
+
+function corrBoardEl(p, mine, phase, isTurn) {
+  const d = document.createElement('div');
+  d.className = 'board';
+  const statusTxt = p.eliminated ? 'cracked' : (phase === 'active' && isTurn ? 'to jab' : 'alive');
+  const statusCls = p.eliminated ? 'status-eliminated' : 'status-alive';
+  d.innerHTML = '<div class="board-header">' +
+    '<div class="board-name" style="color:var(--jab)">' + esc(p.name) + (mine ? ' (you)' : '') + '</div>' +
+    '<div class="board-status ' + statusCls + '">' + statusTxt + '</div>' +
+    '</div><div class="tiles"></div>';
+  const tc = d.querySelector('.tiles');
+  (p.tiles || []).forEach(t => {
+    const el = document.createElement('div');
+    const sp = t.char === ' ';
+    if (t.revealed) {
+      el.className = sp ? 'tile blank-revealed' : 'tile revealed';
+      el.textContent = sp ? '·' : String(t.char).toUpperCase();
+    } else if (mine && t.char != null) {
+      // Your own board: you already know your word, so show it (dimmed) with
+      // revealed tiles highlighting how far the opponent has cracked you.
+      el.className = sp ? 'tile blank-revealed' : 'tile';
+      el.style.opacity = '0.6';
+      el.textContent = sp ? '·' : String(t.char).toUpperCase();
+    } else {
+      el.className = 'tile hidden';
+      el.textContent = '?';
+    }
+    tc.appendChild(el);
+  });
+  return d;
+}
+
+function renderCorrLetters(opp, me) {
+  const lg = document.getElementById('corr-letters');
+  lg.innerHTML = '';
+  const canPlay = corrGame && corrGame.phase === 'active' && corrGame.yourTurn;
+  const myGuesses = (me && me.guessed) || [];
+  const oppTiles = (opp && opp.tiles) || [];
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').forEach(l => {
+    const lo = l.toLowerCase();
+    const correct = oppTiles.some(t => t.revealed && t.char && t.char.toLowerCase() === lo);
+    const wrong = myGuesses.includes(lo) && !correct;
+    const b = document.createElement('button');
+    b.className = 'letter-btn';
+    b.textContent = l;
+    if (correct) { b.className += ' used-correct'; b.disabled = true; }
+    else if (wrong) { b.className += ' used-wrong'; b.disabled = true; }
+    else if (!canPlay) { b.disabled = true; }
+    b.onclick = () => corrGuess(l);
+    lg.appendChild(b);
+  });
+}
+
+// ── "Your matches" list + turn badge on the home screen ─────────────────────
+async function refreshCorrList() {
+  const name = getSavedPlayerName();
+  const listEl = document.getElementById('corr-list');
+  if (!name || !hasBackend()) {
+    if (listEl) listEl.innerHTML = '';
+    renderCorrBadge(0);
+    return;
+  }
+  const r = await apiPostJson('/corr/list', { name, secret: mySecret() }, 7000);
+  if (r && r.ok && r.data.games) {
+    renderCorrList(r.data.games);
+    renderCorrBadge(r.data.awaiting || 0);
+  }
+}
+
+function renderCorrBadge(n) {
+  const badge = document.getElementById('corr-turn-badge');
+  if (!badge) return;
+  badge.textContent = n > 0 ? ('· ' + n + ' await' + (n === 1 ? 's' : '') + ' your move') : '';
+}
+
+function renderCorrList(games) {
+  const el = document.getElementById('corr-list');
+  if (!el) return;
+  if (!games.length) { el.innerHTML = ''; return; }
+  // Awaiting-your-move first, then active, then finished.
+  const rank = g => g.phase === 'finished' ? 2 : (g.yourTurn ? 0 : 1);
+  const sorted = games.slice().sort((a, b) => rank(a) - rank(b) || (b.updatedTs || 0) - (a.updatedTs || 0));
+  let html = '<div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">your matches</div>';
+  sorted.slice(0, 8).forEach(g => {
+    let label, color;
+    if (g.phase === 'waiting') { label = 'waiting for opponent · ' + g.code; color = 'var(--muted)'; }
+    else if (g.phase === 'finished') { label = g.youWon ? 'you won 🏆' : 'you lost'; color = 'var(--muted)'; }
+    else if (g.yourTurn) { label = 'your move 🥊'; color = 'var(--jab-soft)'; }
+    else { label = 'their move…'; color = 'var(--muted)'; }
+    const opp = g.opponent ? esc(g.opponent) : 'opponent';
+    html += '<button class="corr-match-row" onclick="openCorrById(\'' + esc(g.id) + '\')">' +
+      '<span class="cm-opp">vs ' + opp + '</span>' +
+      '<span class="cm-label" style="color:' + color + '">' + label + '</span></button>';
+  });
+  el.innerHTML = html;
+}
+
+async function openCorrById(id) {
+  const name = getSavedPlayerName();
+  if (!name) return;
+  const r = await apiPostJson('/corr/state', { name, secret: mySecret(), gameId: id }, 8000);
+  if (r && r.ok && r.data.game) { openCorrGame(r.data.game); }
+}
+
+function initCorr() {
+  refreshCorrList();
+  if (corrListTimer) clearInterval(corrListTimer);
+  // Light periodic refresh so the turn badge updates while sitting on home.
+  corrListTimer = setInterval(() => {
+    if (document.getElementById('screen-home').classList.contains('active')) refreshCorrList();
+  }, 30000);
+  // Deep link: wordjab.io/?corr=CODE lands on the join screen with the code filled.
+  try {
+    const code = new URLSearchParams(location.search).get('corr');
+    if (code && /^[a-zA-Z]{4}$/.test(code)) {
+      openCorrJoin();
+      document.getElementById('corr-join-code').value = code.toUpperCase();
+      history.replaceState(null, '', location.pathname);
+      setTimeout(() => document.getElementById('corr-join-word').focus(), 120);
+    }
+  } catch(e) {}
+}
+
 // Init local player slots
 addPlayer('Player 1'); addPlayer('Player 2'); addPlayer('Player 3');
 initLeaderboard();
 renderDailyHomeBadge();
 checkResumeSession();
 initLounge();
+initCorr();
 
 // Last-chance snapshot if the host closes or reloads the tab
 window.addEventListener('beforeunload', () => {
