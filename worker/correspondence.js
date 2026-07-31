@@ -6,25 +6,28 @@
 // It does NOT touch the existing /leaderboard, /register, /daily, or /result
 // endpoints — paste it into the deployed Worker and add ONE line to the router
 // (see "HOW TO INSTALL" at the bottom of this file). The correspondence system
-// is server-authoritative: game state (including both players' secret words)
+// is server-authoritative: game state (including every player's secret word)
 // lives in KV, not in a host's browser, so a correspondence game survives
 // everyone leaving — which is also why it sidesteps the live-game disconnect
 // problem entirely.
 //
 // Storage (same KV namespace bound as env.LEADERBOARD):
-//   corr:<gameId>       -> full server-side game record (holds both words)
+//   corr:<gameId>       -> full server-side game record (holds every word)
 //   corrcode:<CODE>     -> gameId, so a 4-letter code can be joined (removed
-//                          once the second player joins)
+//                          once the match starts)
 //   corridx:<namelower> -> JSON array of gameIds this player is in (bounded)
 //   id:<namelower>      -> per-identity record, SHARED with /register + /daily
 //                          (same shape) so a name reserved here is the same
 //                          reserved name everywhere.
 //
-// Model: 2-player, Last-Standing. Each player hides a secret word; players take
-// turns throwing letters at the opponent's board. A hit reveals every matching
-// tile and you jab again (turn stays); a miss passes the turn. First to fully
-// crack the opponent's word wins. Blanks reveal one-at-a-time (position leaks
-// nothing) — the same rule as the live game's processGuess().
+// Model: 2–6 players, Last-Standing. The creator picks how many players the
+// match is for; everyone else joins by code and hides a secret word. The match
+// starts when it fills up (or the creator starts it early with >=2 in). On your
+// turn you pick a still-standing opponent and throw a letter at their board: a
+// hit reveals every matching tile and you jab again (turn stays); a miss passes
+// to the next player. Crack a board and that player is out; last one standing
+// wins. Blanks reveal one-at-a-time (position leaks nothing) — the same rules
+// as the live game's processGuess().
 // ============================================================================
 
 const CORR_CORS = {
@@ -42,8 +45,9 @@ function corrJson(obj, status = 200) {
 
 const CORR_MAX_WORD = 30;       // hard ceiling on board size
 const CORR_MIN_WORD = 4;
+const CORR_MIN_PLAYERS = 2;
+const CORR_MAX_PLAYERS = 6;
 const CORR_IDX_CAP = 25;        // most-recent games kept in a player's index
-const CORR_STREAK_CAP = 3650;   // matches /daily sanity cap (for fresh claims)
 
 function corrCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // no ambiguous O/0 I/1, matches client
@@ -54,16 +58,11 @@ function corrCode() {
 function corrId() {
   return 'g' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
-function corrWeekIndex(day) {
-  // Weekly buckets keyed off the client's local day number, same basis the rest
-  // of the leaderboard uses. `day` is optional; only used when claiming fresh.
-  return Math.floor((day || 0) / 7);
-}
 
-// Claim/verify a name via the shared id:<lower> record. Returns
-// { ok:true } if the caller owns the name (or it was free and is now theirs),
-// or { taken:true } if a different secret already holds it. Fresh claims are
-// written in the SAME shape /register + /daily use, so nothing downstream breaks.
+// Claim/verify a name via the shared id:<lower> record. Returns { ok:true } if
+// the caller owns the name (or it was free and is now theirs), or { taken:true }
+// if a different secret already holds it. Fresh claims are written in the SAME
+// shape /register + /daily use, so nothing downstream breaks.
 async function corrOwnName(env, name, secret) {
   const lower = String(name || '').toLowerCase();
   if (!lower || !secret) return { taken: false, bad: true };
@@ -91,6 +90,14 @@ function corrCleanWord(raw, charCount) {
 function corrMakeTiles(word) {
   return word.split('').map(ch => ({ char: ch, revealed: false }));
 }
+function corrMakePlayer(name, word, charCount) {
+  return {
+    name, nameLower: String(name).toLowerCase(),
+    tiles: corrMakeTiles(corrCleanWord(word, charCount)),
+    wrong: [],           // letters thrown at THIS board that missed (per-board)
+    eliminated: false,
+  };
+}
 
 async function corrIdxAdd(env, name, gameId) {
   const key = 'corridx:' + String(name).toLowerCase();
@@ -114,13 +121,32 @@ function corrPlayerIndex(game, name) {
   const lower = String(name || '').toLowerCase();
   return game.players.findIndex(p => p && p.nameLower === lower);
 }
+function corrAliveCount(game) {
+  return game.players.filter(p => p && !p.eliminated).length;
+}
+// Next still-standing player after `from` (wraps). Returns `from` if nobody else.
+function corrNextTurn(game, from) {
+  const n = game.players.length;
+  for (let step = 1; step <= n; step++) {
+    const i = (from + step) % n;
+    if (game.players[i] && !game.players[i].eliminated) return i;
+  }
+  return from;
+}
+// Begin play: coin-flip a random still-standing player to jab first.
+function corrStartGame(game) {
+  game.phase = 'active';
+  game.turn = Math.floor(Math.random() * game.players.length);
+}
 
 // Client-facing view of a game. The requester sees their OWN word in full, but
-// the opponent's unrevealed tiles are redacted to null — the secret never leaves
-// the server until a letter actually cracks it open.
+// every other player's unrevealed tiles are redacted to null — a secret never
+// leaves the server until a letter actually cracks it open. Once the game is
+// finished, all words are revealed.
 function corrRedact(game, meName) {
   const meIdx = corrPlayerIndex(game, meName);
-  const over = game.phase === 'finished'; // reveal both words once the game is done
+  const over = game.phase === 'finished';
+  const meLower = String(meName || '').toLowerCase();
   const players = game.players.map((p, i) => {
     if (!p) return null;
     const mine = i === meIdx;
@@ -128,7 +154,7 @@ function corrRedact(game, meName) {
       name: p.name,
       eliminated: !!p.eliminated,
       resigned: !!p.resigned,
-      guessed: p.guessed || [],
+      wrong: p.wrong || [],
       tiles: (p.tiles || []).map(t => ({
         char: (mine || t.revealed || over) ? t.char : null,
         revealed: !!t.revealed,
@@ -138,57 +164,64 @@ function corrRedact(game, meName) {
   const yourTurn = game.phase === 'active' && meIdx >= 0 && game.turn === meIdx;
   return {
     id: game.id, code: game.code, charCount: game.charCount,
-    phase: game.phase, turn: game.turn, winner: game.winner || null,
+    target: game.target, phase: game.phase, turn: game.turn,
+    winner: game.winner || null,
     yourIndex: meIdx, yourTurn,
+    isHost: game.hostLower === meLower,
+    joined: game.players.length,
     players, lastMove: game.lastMove || null,
     createdTs: game.createdTs, updatedTs: game.updatedTs,
   };
 }
 
-// Apply one letter guess by the player whose turn it is. Mirrors the client's
-// processGuess: hit reveals all matching tiles (blanks one-at-a-time) and the
-// turn stays; miss passes the turn. Cracking the opponent's board wins.
-function corrApplyGuess(game, letter) {
+// Apply one letter guess by the player whose turn it is, at players[targetIdx].
+// Mirrors the client's processGuess: a hit reveals all matching tiles (blanks
+// one-at-a-time) and the turn stays; a miss passes to the next player. Cracking
+// the last remaining opponent wins.
+function corrApplyGuess(game, letter, targetIdx) {
   const gi = game.turn;
-  const ti = gi === 0 ? 1 : 0;
   const guesser = game.players[gi];
-  const target = game.players[ti];
+  const target = game.players[targetIdx];
+  if (!target) return { error: 'bad-target' };
+  if (targetIdx === gi) return { error: 'bad-target' };
+  if (target.eliminated) return { error: 'target-out' };
+
   const lc = String(letter || '').toLowerCase();
-  if (!lc || lc.length !== 1) return { error: 'bad-letter' };
   if (!/^[a-z ]$/.test(lc)) return { error: 'bad-letter' };
-  if (!guesser.guessed) guesser.guessed = [];
-  // A real letter can only be tried once. Spaces are exempt: blanks reveal
-  // one-at-a-time, so you must be able to keep jabbing spaces to clear padding
-  // (the same as the live game, which never locks out repeated space guesses).
-  if (lc !== ' ' && guesser.guessed.includes(lc)) return { error: 'dup' };
+  if (!target.wrong) target.wrong = [];
+  const alreadyRevealed = target.tiles.some(t => t.revealed && t.char && t.char.toLowerCase() === lc);
+  // A real letter can only be thrown at a given board once. Spaces are exempt:
+  // blanks reveal one-at-a-time, so you must be able to keep jabbing spaces to
+  // clear padding (the same as the live game, which never locks repeated spaces).
+  if (lc !== ' ' && (alreadyRevealed || target.wrong.includes(lc))) return { error: 'dup' };
 
   let hitIdxs = [];
   target.tiles.forEach((t, i) => {
     if (!t.revealed && t.char && t.char.toLowerCase() === lc) hitIdxs.push(i);
   });
-  // Blanks: reveal just one (random) so a single space guess can't strip all padding.
   if (lc === ' ' && hitIdxs.length > 1) {
     hitIdxs = [hitIdxs[Math.floor(Math.random() * hitIdxs.length)]];
   }
-
-  if (lc !== ' ') guesser.guessed.push(lc);
 
   if (hitIdxs.length > 0) {
     hitIdxs.forEach(i => { target.tiles[i].revealed = true; });
     const cracked = target.tiles.every(t => t.revealed);
     if (cracked) {
       target.eliminated = true;
-      game.phase = 'finished';
-      game.winner = guesser.name;
-      game.lastMove = { by: guesser.name, letter: lc, result: 'crack', targetIdx: ti, revealedIdxs: hitIdxs };
+      game.lastMove = { by: guesser.name, letter: lc, result: 'crack', targetIdx, targetName: target.name, revealedIdxs: hitIdxs };
+      if (corrAliveCount(game) <= 1) {
+        game.phase = 'finished';
+        const last = game.players.find(p => p && !p.eliminated);
+        game.winner = last ? last.name : guesser.name;
+      }
+      // otherwise the guesser keeps jabbing (a hit always continues the turn)
     } else {
-      // Hit — same player keeps the turn (jab again).
-      game.lastMove = { by: guesser.name, letter: lc, result: 'hit', targetIdx: ti, revealedIdxs: hitIdxs };
+      game.lastMove = { by: guesser.name, letter: lc, result: 'hit', targetIdx, targetName: target.name, revealedIdxs: hitIdxs };
     }
   } else {
-    // Miss — turn passes to the opponent.
-    game.turn = ti;
-    game.lastMove = { by: guesser.name, letter: lc, result: 'miss', targetIdx: ti, revealedIdxs: [] };
+    if (lc !== ' ') target.wrong.push(lc);
+    game.turn = corrNextTurn(game, gi);
+    game.lastMove = { by: guesser.name, letter: lc, result: 'miss', targetIdx, targetName: target.name, revealedIdxs: [] };
   }
   return { ok: true };
 }
@@ -196,7 +229,7 @@ function corrApplyGuess(game, letter) {
 // ── Endpoint handlers ───────────────────────────────────────────────────────
 
 async function corrCreate(env, body) {
-  const { name, secret, word, charCount, day } = body;
+  const { name, secret, word, charCount, players } = body;
   const own = await corrOwnName(env, name, secret);
   if (own.bad) return corrJson({ ok: false, error: 'bad-name' }, 400);
   if (own.taken) return corrJson({ ok: false, taken: true }, 409);
@@ -204,10 +237,13 @@ async function corrCreate(env, body) {
   let size = parseInt(charCount, 10);
   if (isNaN(size)) size = 10;
   size = Math.max(CORR_MIN_WORD, Math.min(CORR_MAX_WORD, size));
+  let target = parseInt(players, 10);
+  if (isNaN(target)) target = 2;
+  target = Math.max(CORR_MIN_PLAYERS, Math.min(CORR_MAX_PLAYERS, target));
+
   const clean = corrCleanWord(word, size);
   if (clean.trim().length < 1) return corrJson({ ok: false, error: 'empty-word' }, 400);
 
-  // Reserve a game id + a non-colliding join code.
   const id = corrId();
   let code = corrCode();
   for (let i = 0; i < 5; i++) {
@@ -218,16 +254,14 @@ async function corrCreate(env, body) {
   }
 
   const game = {
-    id, code, charCount: size, mode: 'last', phase: 'waiting',
-    turn: 0, winner: null, createdTs: Date.now(), updatedTs: Date.now(),
-    lastMove: null,
-    players: [
-      { name, nameLower: String(name).toLowerCase(), tiles: corrMakeTiles(clean), guessed: [], eliminated: false },
-      null,
-    ],
+    id, code, charCount: size, mode: 'last', target,
+    phase: 'waiting', turn: 0, winner: null,
+    hostLower: String(name).toLowerCase(),
+    createdTs: Date.now(), updatedTs: Date.now(), lastMove: null,
+    players: [corrMakePlayer(name, word, size)],
   };
   await corrSave(env, game);
-  try { await env.LEADERBOARD.put('corrcode:' + code, id, { expirationTtl: 60 * 60 * 24 * 7 }); } catch (e) {}
+  try { await env.LEADERBOARD.put('corrcode:' + code, id, { expirationTtl: 60 * 60 * 24 * 14 }); } catch (e) {}
   await corrIdxAdd(env, name, id);
   return corrJson({ ok: true, gameId: id, code, game: corrRedact(game, name) });
 }
@@ -244,25 +278,41 @@ async function corrJoin(env, body) {
   if (!gameId) return corrJson({ ok: false, error: 'not-found' }, 404);
   const game = await corrLoad(env, gameId);
   if (!game) return corrJson({ ok: false, error: 'not-found' }, 404);
-  if (game.phase !== 'waiting' || game.players[1]) return corrJson({ ok: false, error: 'full' }, 409);
-  if (game.players[0] && game.players[0].nameLower === String(name).toLowerCase()) {
-    return corrJson({ ok: false, error: 'self' }, 409);
-  }
+  if (game.phase !== 'waiting') return corrJson({ ok: false, error: 'started' }, 409);
+  if (corrPlayerIndex(game, name) >= 0) return corrJson({ ok: false, error: 'already-in', game: corrRedact(game, name) }, 200);
+  if (game.players.length >= game.target) return corrJson({ ok: false, error: 'full' }, 409);
 
   const clean = corrCleanWord(word, game.charCount);
   if (clean.trim().length < 1) return corrJson({ ok: false, error: 'empty-word' }, 400);
 
-  game.players[1] = { name, nameLower: String(name).toLowerCase(), tiles: corrMakeTiles(clean), guessed: [], eliminated: false };
-  game.phase = 'active';
-  game.turn = Math.random() < 0.5 ? 0 : 1; // coin flip for first jab
+  game.players.push(corrMakePlayer(name, word, game.charCount));
+  if (game.players.length >= game.target) {
+    corrStartGame(game);
+    try { await env.LEADERBOARD.delete('corrcode:' + up); } catch (e) {}
+  }
   await corrSave(env, game);
-  try { await env.LEADERBOARD.delete('corrcode:' + up); } catch (e) {}
   await corrIdxAdd(env, name, gameId);
   return corrJson({ ok: true, gameId, game: corrRedact(game, name) });
 }
 
+// The creator can start the match early once >=2 players are in.
+async function corrStart(env, body) {
+  const { name, secret, gameId } = body;
+  const own = await corrOwnName(env, name, secret);
+  if (own.taken) return corrJson({ ok: false, taken: true }, 409);
+  const game = await corrLoad(env, gameId);
+  if (!game) return corrJson({ ok: false, error: 'not-found' }, 404);
+  if (game.hostLower !== String(name).toLowerCase()) return corrJson({ ok: false, error: 'not-host' }, 403);
+  if (game.phase !== 'waiting') return corrJson({ ok: true, game: corrRedact(game, name) });
+  if (game.players.length < CORR_MIN_PLAYERS) return corrJson({ ok: false, error: 'need-two', game: corrRedact(game, name) }, 409);
+  corrStartGame(game);
+  try { await env.LEADERBOARD.delete('corrcode:' + game.code); } catch (e) {}
+  await corrSave(env, game);
+  return corrJson({ ok: true, game: corrRedact(game, name) });
+}
+
 async function corrMove(env, body) {
-  const { name, secret, gameId, letter } = body;
+  const { name, secret, gameId, letter, targetIdx } = body;
   const own = await corrOwnName(env, name, secret);
   if (own.bad) return corrJson({ ok: false, error: 'bad-name' }, 400);
   if (own.taken) return corrJson({ ok: false, taken: true }, 409);
@@ -274,7 +324,10 @@ async function corrMove(env, body) {
   if (game.phase !== 'active') return corrJson({ ok: false, error: 'not-active', game: corrRedact(game, name) }, 409);
   if (game.turn !== meIdx) return corrJson({ ok: false, error: 'not-your-turn', game: corrRedact(game, name) }, 409);
 
-  const res = corrApplyGuess(game, letter);
+  const ti = parseInt(targetIdx, 10);
+  if (isNaN(ti) || ti < 0 || ti >= game.players.length) return corrJson({ ok: false, error: 'bad-target' }, 400);
+
+  const res = corrApplyGuess(game, letter, ti);
   if (res.error) return corrJson({ ok: false, error: res.error, game: corrRedact(game, name) }, 400);
   await corrSave(env, game);
   return corrJson({ ok: true, game: corrRedact(game, name) });
@@ -297,12 +350,32 @@ async function corrResign(env, body) {
   const meIdx = corrPlayerIndex(game, name);
   if (meIdx < 0) return corrJson({ ok: false, error: 'not-a-player' }, 403);
   if (game.phase === 'finished') return corrJson({ ok: true, game: corrRedact(game, name) });
-  const other = game.players[meIdx === 0 ? 1 : 0];
-  game.players[meIdx].resigned = true;
-  game.players[meIdx].eliminated = true;
-  game.phase = 'finished';
-  game.winner = other ? other.name : null;
+
+  const me = game.players[meIdx];
+  if (game.phase === 'waiting') {
+    // Nothing's started — just mark them out; if the host bails and nobody's
+    // left, the game is abandoned/finished with no winner.
+    me.resigned = true; me.eliminated = true;
+    if (corrAliveCount(game) <= 1) {
+      game.phase = 'finished';
+      const last = game.players.find(p => p && !p.eliminated);
+      game.winner = last ? last.name : null;
+    }
+    game.lastMove = { by: name, result: 'resign' };
+    await corrSave(env, game);
+    return corrJson({ ok: true, game: corrRedact(game, name) });
+  }
+
+  const wasMyTurn = game.turn === meIdx;
+  me.resigned = true; me.eliminated = true;
   game.lastMove = { by: name, result: 'resign' };
+  if (corrAliveCount(game) <= 1) {
+    game.phase = 'finished';
+    const last = game.players.find(p => p && !p.eliminated);
+    game.winner = last ? last.name : null;
+  } else if (wasMyTurn) {
+    game.turn = corrNextTurn(game, meIdx);
+  }
   await corrSave(env, game);
   return corrJson({ ok: true, game: corrRedact(game, name) });
 }
@@ -310,7 +383,7 @@ async function corrResign(env, body) {
 async function corrList(env, body) {
   const { name } = body;
   const lower = String(name || '').toLowerCase();
-  if (!lower) return corrJson({ ok: true, games: [] });
+  if (!lower) return corrJson({ ok: true, games: [], awaiting: 0 });
   let ids = [];
   try { ids = (await env.LEADERBOARD.get('corridx:' + lower, 'json')) || []; } catch (e) {}
   const games = [];
@@ -319,10 +392,10 @@ async function corrList(env, body) {
     if (!g) continue;
     const meIdx = corrPlayerIndex(g, name);
     if (meIdx < 0) continue;
-    const opp = g.players[meIdx === 0 ? 1 : 0];
+    const opponents = g.players.filter((_, i) => i !== meIdx).map(p => p.name);
     games.push({
       id: g.id, code: g.code, phase: g.phase,
-      opponent: opp ? opp.name : null,
+      opponents, playerCount: g.players.length, target: g.target,
       yourTurn: g.phase === 'active' && g.turn === meIdx,
       youWon: g.phase === 'finished' && g.winner && g.winner.toLowerCase() === lower,
       winner: g.winner || null,
@@ -347,6 +420,7 @@ async function handleCorrespondence(request, env, path) {
   switch (path) {
     case '/corr/create':  return corrCreate(env, body);
     case '/corr/join':    return corrJoin(env, body);
+    case '/corr/start':   return corrStart(env, body);
     case '/corr/move':    return corrMove(env, body);
     case '/corr/state':   return corrStateEndpoint(env, body);
     case '/corr/resign':  return corrResign(env, body);
