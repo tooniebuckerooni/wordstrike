@@ -3452,14 +3452,39 @@ function dateStr(d) {
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
 function todayStr() { return dateStr(new Date()); }
-function yesterdayStr() { const d = new Date(); d.setDate(d.getDate()-1); return dateStr(d); }
-
-function seedFromDate(str) {
-  let h = 0;
-  for (let i=0;i<str.length;i++) h = (h*31 + str.charCodeAt(i)) | 0;
-  return Math.abs(h);
+function dayBeforeStr(ymd) {
+  const [y, m, dd] = ymd.split('-').map(Number);
+  const d = new Date(y, m - 1, dd); d.setDate(d.getDate() - 1);
+  return dateStr(d);
 }
-function getDailyWord() { return DAILY_WORDS[seedFromDate(todayStr()) % DAILY_WORDS.length]; }
+
+// Deterministic shuffle (xorshift32 PRNG) so every word in DAILY_WORDS gets
+// played exactly once before any word repeats. Old code picked
+// DAILY_WORDS[hash(dateString) % length] — a polynomial string hash of
+// near-identical, sequential date strings ("2026-08-03", "2026-08-04", ...)
+// changes by roughly a constant each day, so the index it produced barely
+// moved from one day to the next. That gave frequent near/immediate repeats
+// instead of a fair pass through the whole list.
+function shuffledOrder(seed, n) {
+  let s = (seed >>> 0) || 1;
+  const rand = () => {
+    s ^= s << 13; s ^= s >>> 17; s ^= s << 5; s >>>= 0;
+    return s / 4294967296;
+  };
+  const arr = Array.from({ length: n }, (_, i) => i);
+  for (let i = n - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    const tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+  }
+  return arr;
+}
+function getDailyWord() {
+  const n = DAILY_WORDS.length;
+  const dayIdx = dailyDayNumber() - 1; // 0-based, stable per local calendar day
+  const cycle = Math.floor(dayIdx / n);
+  const pos = dayIdx % n;
+  return DAILY_WORDS[shuffledOrder(cycle + 1, n)[pos]];
+}
 
 const DAILY_EPOCH = new Date(2024, 0, 1);
 function dailyDayNumber() {
@@ -3490,6 +3515,7 @@ let dailyTiles = [];
 let dailyWrong = new Set();
 let dailyRoundsLeft = DAILY_ROUNDS;
 let dailyDone = false;
+let dailyPlayDate = null; // the calendar day this round's word belongs to (pinned at open, not re-read at finish)
 
 function setFeedbackEl(id, msg, type) {
   const el = document.getElementById(id);
@@ -3518,6 +3544,7 @@ function openDailyJab() {
     return;
   }
   const word = getDailyWord();
+  dailyPlayDate = today;
   dailyTiles = word.split('').map(ch => ({ char: ch, revealed: false }));
   dailyWrong = new Set();
   dailyRoundsLeft = DAILY_ROUNDS;
@@ -3605,8 +3632,12 @@ function guessDailyLetter(letter) {
 
 function finishDaily(won) {
   const state = getDailyState();
-  const today = todayStr();
-  const yest = yesterdayStr();
+  // Pinned to the day the word was fetched for (openDailyJab), not
+  // re-read here — a round that's still open when the clock ticks past
+  // midnight must still count for the day it was actually played, or the
+  // streak's "played yesterday" check silently breaks and resets to 1.
+  const today = dailyPlayDate || todayStr();
+  const yest = dayBeforeStr(today);
   state.streak = won ? (state.lastPlayedDate === yest ? (state.streak||0) + 1 : 1) : 0;
   state.best = Math.max(state.best||0, state.streak);
   state.lastPlayedDate = today;
