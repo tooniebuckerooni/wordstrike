@@ -3741,6 +3741,14 @@ async function postDailyStreak() {
   try { r = await Promise.race([submitDaily(name, won), timeout]); } catch(e) { r = { ok: false }; }
   if (r && r.ok) {
     saveIdentity(name); // remember the claimed name (shared with the lounge)
+    // Reconcile local storage with what the server actually has on file for
+    // this name. This device's own copy is normally authoritative, but a
+    // successful save is a rare confirmed checkpoint — use it to heal
+    // forward (never backward) if this device's storage ever undercounts.
+    const cur = getDailyState();
+    cur.best = Math.max(cur.best || 0, r.best || 0);
+    cur.streak = Math.max(cur.streak || 0, r.streak || 0);
+    saveDailyState(cur);
     applyClaimedName('daily-streak-name', 'daily-name-change');
     msg.style.color = 'var(--jab-soft)';
     msg.textContent = r.already
