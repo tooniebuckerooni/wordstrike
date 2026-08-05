@@ -3481,13 +3481,7 @@ function dayBeforeStr(ymd) {
   return dateStr(d);
 }
 
-// Deterministic shuffle (xorshift32 PRNG) so every word in DAILY_WORDS gets
-// played exactly once before any word repeats. Old code picked
-// DAILY_WORDS[hash(dateString) % length] — a polynomial string hash of
-// near-identical, sequential date strings ("2026-08-03", "2026-08-04", ...)
-// changes by roughly a constant each day, so the index it produced barely
-// moved from one day to the next. That gave frequent near/immediate repeats
-// instead of a fair pass through the whole list.
+// Deterministic shuffle (xorshift32 PRNG), used once to build WORD_ORDER below.
 function shuffledOrder(seed, n) {
   let s = (seed >>> 0) || 1;
   const rand = () => {
@@ -3501,12 +3495,45 @@ function shuffledOrder(seed, n) {
   }
   return arr;
 }
+
+// Words the OLD date-hash picker (DAILY_WORDS[hash(dateString) % length])
+// actually served between launch (2026-06-18) and the fix (2026-08-03) — a
+// polynomial hash of near-identical, sequential date strings barely moves
+// from one day to the next, so it repeated constantly. These are held back
+// so they don't feel repeated again right away.
+const RECENTLY_USED_PRE_FIX = ['ANCHOR','BALLAD','BRAWLER','CHAMPION','CHATTER','DUGOUT','ELEPHANT','FASTBALL',
+  'FESTIVAL','GALAXY','GRAPPLE','HARVEST','HUDDLE','ISLAND','JOURNEY','KEYBOARD','KNUCKLE','LANTERN','MOUNTAIN',
+  'NOTEBOOK','OYSTER','PLAYOFF','PRETZEL','QUARTZ','REFEREE','RIBBON','RINGSIDE','ROOKIE','SCRAPPY','SLUGGER',
+  'STADIUM','SUNSET','THUNDER','TIMEOUT','UMBRELLA','UNDERDOG','UPPERCUT','VELVET','VOLCANO','WALNUT','YONDER','ZEPHYR'];
+// Words the fixed picker itself already served live (2026-08-03/04/05) before
+// this ordering existed — pinned by position so returning players still see
+// what they actually played, and the shuffle below can't re-deal them.
+const ALREADY_SHOWN = ['SAXOPHONE', 'FIREFLY', 'ORCHARD'];
+const WORD_SCHEDULE_START = new Date(2026, 7, 3); // day the shuffle-based picker went live
+
+// One fixed order, reused every cycle (not reshuffled per cycle) — every
+// word sits at exactly one position, so the gap between any two occurrences
+// of the same word is always exactly WORD_ORDER.length days. A fresh
+// per-cycle shuffle can't promise that: two independent random orders can
+// coincidentally place the same word near both ends of the boundary between
+// them, so the actual minimum gap has to be re-verified, not assumed. Fixing
+// the order once removes that risk by construction instead of by luck.
+function buildWordOrder() {
+  const recent = new Set(RECENTLY_USED_PRE_FIX);
+  const shown = new Set(ALREADY_SHOWN);
+  const stale = DAILY_WORDS.filter(w => recent.has(w));
+  const fresh = DAILY_WORDS.filter(w => !recent.has(w) && !shown.has(w));
+  const freshOrder = shuffledOrder(9001, fresh.length).map(i => fresh[i]);
+  const staleOrder = shuffledOrder(9002, stale.length).map(i => stale[i]);
+  return ALREADY_SHOWN.concat(freshOrder, staleOrder);
+}
+const WORD_ORDER = buildWordOrder();
+
 function getDailyWord() {
-  const n = DAILY_WORDS.length;
-  const dayIdx = dailyDayNumber() - 1; // 0-based, stable per local calendar day
-  const cycle = Math.floor(dayIdx / n);
-  const pos = dayIdx % n;
-  return DAILY_WORDS[shuffledOrder(cycle + 1, n)[pos]];
+  const now = new Date(); now.setHours(0,0,0,0);
+  const start = new Date(WORD_SCHEDULE_START); start.setHours(0,0,0,0);
+  const offset = Math.max(0, Math.floor((now - start) / 86400000));
+  return WORD_ORDER[offset % WORD_ORDER.length];
 }
 
 const DAILY_EPOCH = new Date(2024, 0, 1);
