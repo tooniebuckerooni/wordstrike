@@ -2009,8 +2009,16 @@ function onWordInput() {
 
 async function checkWord(word) {
   try {
-    const r = await fetch('https://api.dictionaryapi.dev/api/v2/entries/en/' + encodeURIComponent(word.toLowerCase()));
-    return r.ok;
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 5000);
+    const r = await fetch('https://api.dictionaryapi.dev/api/v2/entries/en/' + encodeURIComponent(word.toLowerCase()), { signal: ctrl.signal });
+    clearTimeout(t);
+    // Only a confirmed "not found" (404) means the dictionary doesn't have it.
+    // Rate limits (429), server errors, and timeouts are inconclusive — treat
+    // them the same as an unreachable API and let the word through rather
+    // than rejecting real words because the lookup itself failed.
+    if (r.status === 404) return false;
+    return true;
   } catch(e) { return true; }
 }
 
@@ -3579,6 +3587,10 @@ function renderDailyHomeBadge() {
   if (!flameEl || !subEl) return;
   const state = getDailyState();
   flameEl.textContent = state.streak > 0 ? ('\u{1F525} ' + state.streak) : '';
+  if (!storageWorks()) {
+    subEl.textContent = "This browser isn't saving between visits — your streak will reset each time. Turn off Private Browsing / allow site data for this site.";
+    return;
+  }
   if (state.lastPlayedDate === todayStr()) {
     subEl.textContent = state.lastResult === 'win' ? "Cracked today's word. Come back tomorrow." : "Today's jab is done. Come back tomorrow.";
   } else {
@@ -3758,6 +3770,11 @@ async function postDailyStreak() {
   const state = getDailyState();
   if (state.lastPlayedDate !== todayStr()) {
     msg.style.color = 'var(--hit-soft)'; msg.textContent = "Play today's Daily Jab first."; return;
+  }
+  if (!storageWorks()) {
+    msg.style.color = 'var(--hit-soft)';
+    msg.textContent = "This browser isn't saving data between visits, so a streak name can't be claimed here. Turn off Private Browsing or allow site data/cookies for this site, then reload and try again.";
+    return;
   }
   const won = state.lastResult === 'win';
   btn.disabled = true; btn.textContent = 'Saving…';
@@ -3940,14 +3957,39 @@ function unlockNameInput(inputId) {
   input.focus();
 }
 
+// Whether localStorage actually persists a write (round-trips it back out),
+// not just whether calling it throws. Private Browsing, "Block All Cookies",
+// and iOS evicting site data under low storage all let localStorage.setItem
+// succeed silently while the value never sticks — the classic symptom is a
+// device that can never keep hold of its own registered name.
+function storageWorks() {
+  try {
+    const k = '__wj_storage_probe__';
+    localStorage.setItem(k, '1');
+    const ok = localStorage.getItem(k) === '1';
+    localStorage.removeItem(k);
+    return ok;
+  } catch(e) { return false; }
+}
+
 // One stable secret per browser — reused whether or not a name is claimed yet,
 // so the secret used to /register a name matches the one stored with it.
+// Cached in memory for the life of the page: if storage silently fails to
+// persist (see storageWorks above), every localStorage read still comes back
+// empty, so without this cache each call would mint a brand-new secret and
+// every /register attempt would look like a stranger trying to claim an
+// already-owned name — which is exactly the "name is taken" loop this avoids
+// within a single visit. It can't fix persistence across visits; only the
+// browser's storage settings can do that.
+let _cachedSecret = null;
 function mySecret() {
   const id = getIdentity();
   if (id && id.secret) return id.secret;
+  if (_cachedSecret) return _cachedSecret;
   let s = '';
   try { s = localStorage.getItem('wj_secret') || ''; } catch(e) {}
   if (!s) { s = genSecret(); try { localStorage.setItem('wj_secret', s); } catch(e) {} }
+  _cachedSecret = s;
   return s;
 }
 
@@ -4101,6 +4143,10 @@ async function enterLounge() {
   const err = handleError(handle);
   setLoungeFeedback('');
   if (err) { setLoungeFeedback(err); return; }
+  if (!storageWorks()) {
+    setLoungeFeedback("This browser isn't saving data between visits, so a name can't be claimed here. Turn off Private Browsing or allow site data/cookies for this site, then reload and try again.");
+    return;
+  }
   const btn = document.getElementById('lounge-enter-btn');
   btn.textContent = 'Connecting...'; btn.disabled = true;
 
