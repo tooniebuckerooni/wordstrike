@@ -1010,7 +1010,19 @@
           onkeydown="if(event.key==='Enter') postDailyStreak()">
         <button onclick="postDailyStreak()" id="daily-streak-post-btn">Save 🔥</button>
       </div>
-      <div style="text-align:center;margin-top:4px;"><a href="#" id="daily-name-change" onclick="unlockNameInput('daily-streak-name');return false;" style="display:none;font-size:0.68rem;color:var(--muted);">not you? change name</a></div>
+      <div style="text-align:center;margin-top:4px;">
+        <a href="#" id="daily-name-change" onclick="unlockNameInput('daily-streak-name');return false;" style="display:none;font-size:0.68rem;color:var(--muted);">not you? change name</a>
+        <a href="#" id="daily-copy-key-link" onclick="copyDeviceKey(this);return false;" style="display:none;font-size:0.68rem;color:var(--muted);margin-left:0.6rem;">copy device key</a>
+        <a href="#" onclick="toggleRecoverPanel('daily-recover-panel');return false;" style="font-size:0.68rem;color:var(--muted);margin-left:0.6rem;">used this name elsewhere?</a>
+      </div>
+      <div id="daily-recover-panel" style="display:none;margin-top:0.5rem;">
+        <p style="font-size:0.68rem;color:var(--muted);margin-bottom:0.3rem;">Paste the device key you copied from your other device (or from before this one lost its data) to pick up the same name here.</p>
+        <div class="lb-key-row" style="justify-content:center;">
+          <input type="text" id="daily-recover-input" placeholder="paste device key" autocomplete="off">
+          <button onclick="restoreDeviceKey('daily-recover-input','daily-recover-msg')">Restore</button>
+        </div>
+        <div id="daily-recover-msg" aria-live="polite" style="font-size:0.72rem;min-height:1rem;margin-top:0.3rem;"></div>
+      </div>
       <div id="daily-streak-post-msg" aria-live="polite" style="font-size:0.72rem;color:var(--jab-soft);min-height:1rem;margin-top:0.4rem;"></div>
     </div>
   </div>
@@ -3746,6 +3758,12 @@ function showDailyResultScreen(won, word, roundsLeft, state) {
     document.getElementById('daily-streak-post-msg').textContent = '';
     document.getElementById('daily-streak-post-btn').disabled = false;
     document.getElementById('daily-streak-post-btn').textContent = 'Save 🔥';
+    const copyLink = document.getElementById('daily-copy-key-link');
+    if (copyLink) copyLink.style.display = claimed ? 'inline' : 'none';
+    const recoverPanel = document.getElementById('daily-recover-panel');
+    if (recoverPanel) recoverPanel.style.display = 'none';
+    const recoverMsg = document.getElementById('daily-recover-msg');
+    if (recoverMsg) recoverMsg.textContent = '';
   }
 
   lastDailyShare = { won, word, roundsLeft, streak: state.streak };
@@ -3927,6 +3945,54 @@ function saveIdentity(handle) {
   const id = { uid, handle, secret: mySecret() };
   try { localStorage.setItem(IDENTITY_KEY, JSON.stringify(id)); } catch(e) {}
   return id;
+}
+
+// A claimed name is permanently bound to whatever secret first registered
+// it — the server has no other way to prove ownership, and there's no login
+// to recover it through. That's fine on one device, but it means a second
+// device (or a wiped browser) can never re-claim the same name on its own:
+// /register will 409 "taken" forever, even though it's genuinely the same
+// person. The only way around that without server-side auth is to let the
+// person carry their own secret between devices themselves.
+function deviceKeyString() {
+  const handle = getSavedPlayerName();
+  const secret = mySecret();
+  if (!handle || !secret) return '';
+  try { return btoa(JSON.stringify({ h: handle, s: secret })); } catch(e) { return ''; }
+}
+function copyDeviceKey(btn) {
+  const key = deviceKeyString();
+  if (!key) return;
+  copyToClipboard(key, btn, 'Copied!');
+}
+function toggleRecoverPanel(panelId) {
+  const el = document.getElementById(panelId);
+  if (!el) return;
+  el.style.display = (el.style.display === 'none' || !el.style.display) ? 'block' : 'none';
+}
+// Overwrite this device's identity with one exported from another device (or
+// saved before this one lost its data), so it presents the same secret the
+// server already has on file for that name.
+function restoreDeviceKey(inputId, msgId) {
+  const input = document.getElementById(inputId);
+  const msg = document.getElementById(msgId);
+  const raw = (input && input.value || '').trim();
+  let parsed = null;
+  try { parsed = JSON.parse(atob(raw)); } catch(e) {}
+  if (!parsed || !parsed.h || !parsed.s) {
+    if (msg) { msg.style.color = 'var(--hit-soft)'; msg.textContent = "That device key doesn't look right — paste it exactly as copied."; }
+    return;
+  }
+  const existing = getIdentity();
+  const uid = existing ? existing.uid : 'u' + Math.random().toString(36).slice(2, 12);
+  const id = { uid, handle: parsed.h, secret: parsed.s };
+  try { localStorage.setItem(IDENTITY_KEY, JSON.stringify(id)); } catch(e) {}
+  try { localStorage.setItem('wj_secret', parsed.s); } catch(e) {}
+  _cachedSecret = parsed.s;
+  if (msg) { msg.style.color = 'var(--jab-soft)'; msg.textContent = 'Restored ' + parsed.h + ' on this device.'; }
+  if (input) input.value = '';
+  applyClaimedName('daily-streak-name', 'daily-name-change');
+  renderDailyHomeBadge();
 }
 // Keep the player's claimed name consistent: once claimed, name inputs are
 // prefilled and read-only (no accidental typo-renames) with a deliberate
