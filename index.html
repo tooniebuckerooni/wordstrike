@@ -1010,16 +1010,33 @@
           onkeydown="if(event.key==='Enter') postDailyStreak()">
         <button onclick="postDailyStreak()" id="daily-streak-post-btn">Save 🔥</button>
       </div>
+      <div id="daily-recovery-setup" style="margin-top:0.4rem;display:none;">
+        <input type="text" id="daily-recovery-phrase" placeholder="recovery phrase (optional — so you can log in on another device)" maxlength="32" autocomplete="off" style="width:100%;box-sizing:border-box;">
+      </div>
       <div style="text-align:center;margin-top:4px;">
         <a href="#" id="daily-name-change" onclick="unlockNameInput('daily-streak-name');return false;" style="display:none;font-size:0.68rem;color:var(--muted);">not you? change name</a>
         <a href="#" id="daily-copy-key-link" onclick="copyDeviceKey(this);return false;" style="display:none;font-size:0.68rem;color:var(--muted);margin-left:0.6rem;">copy device key</a>
+        <a href="#" id="daily-set-recovery-link" onclick="toggleSetRecoveryPanel();return false;" style="display:none;font-size:0.68rem;color:var(--muted);margin-left:0.6rem;">set/change recovery phrase</a>
         <a href="#" onclick="toggleRecoverPanel('daily-recover-panel');return false;" style="font-size:0.68rem;color:var(--muted);margin-left:0.6rem;">used this name elsewhere?</a>
+      </div>
+      <div id="daily-set-recovery-panel" style="display:none;margin-top:0.5rem;">
+        <div class="lb-key-row" style="justify-content:center;">
+          <input type="text" id="daily-set-recovery-input" placeholder="new recovery phrase" maxlength="32" autocomplete="off">
+          <button onclick="setRecoveryPhrase('daily-set-recovery-input','daily-set-recovery-msg')">Set</button>
+        </div>
+        <div id="daily-set-recovery-msg" aria-live="polite" style="font-size:0.72rem;min-height:1rem;margin-top:0.3rem;"></div>
       </div>
       <div id="daily-recover-panel" style="display:none;margin-top:0.5rem;">
         <p style="font-size:0.68rem;color:var(--muted);margin-bottom:0.3rem;">Paste the device key you copied from your other device (or from before this one lost its data) to pick up the same name here.</p>
         <div class="lb-key-row" style="justify-content:center;">
           <input type="text" id="daily-recover-input" placeholder="paste device key" autocomplete="off">
           <button onclick="restoreDeviceKey('daily-recover-input','daily-recover-msg')">Restore</button>
+        </div>
+        <p style="font-size:0.68rem;color:var(--muted);margin:0.5rem 0 0.3rem;">No device key handy? Recover with your name and recovery phrase instead.</p>
+        <div class="lb-key-row" style="justify-content:center;">
+          <input type="text" id="daily-recover-name" placeholder="your name" maxlength="16" autocomplete="off" style="max-width:110px;">
+          <input type="text" id="daily-recover-phrase" placeholder="recovery phrase" maxlength="32" autocomplete="off">
+          <button onclick="recoverWithPhrase('daily-recover-name','daily-recover-phrase','daily-recover-msg')">Recover</button>
         </div>
         <div id="daily-recover-msg" aria-live="polite" style="font-size:0.72rem;min-height:1rem;margin-top:0.3rem;"></div>
       </div>
@@ -3764,6 +3781,16 @@ function showDailyResultScreen(won, word, roundsLeft, state) {
     if (recoverPanel) recoverPanel.style.display = 'none';
     const recoverMsg = document.getElementById('daily-recover-msg');
     if (recoverMsg) recoverMsg.textContent = '';
+    // Recovery phrase is offered up front while claiming (so it's set before
+    // it's ever needed); once claimed, offer to set/change it instead.
+    const recoverySetup = document.getElementById('daily-recovery-setup');
+    if (recoverySetup) recoverySetup.style.display = claimed ? 'none' : 'block';
+    const setRecoveryLink = document.getElementById('daily-set-recovery-link');
+    if (setRecoveryLink) setRecoveryLink.style.display = claimed ? 'inline' : 'none';
+    const setRecoveryPanel = document.getElementById('daily-set-recovery-panel');
+    if (setRecoveryPanel) setRecoveryPanel.style.display = 'none';
+    const setRecoveryMsg = document.getElementById('daily-set-recovery-msg');
+    if (setRecoveryMsg) setRecoveryMsg.textContent = '';
   }
 
   lastDailyShare = { won, word, roundsLeft, streak: state.streak };
@@ -3794,13 +3821,24 @@ async function postDailyStreak() {
     msg.textContent = "This browser isn't saving data between visits, so a streak name can't be claimed here. Turn off Private Browsing or allow site data/cookies for this site, then reload and try again.";
     return;
   }
+  // Only relevant on a brand-new claim — offered up front so it's set
+  // before it's ever needed, rather than after the device that could set it
+  // is already gone.
+  let recovery = '';
+  if (!getSavedPlayerName()) {
+    const recInput = document.getElementById('daily-recovery-phrase');
+    recovery = (recInput && recInput.value || '').trim();
+    if (recovery && recovery.length < 4) {
+      msg.style.color = 'var(--hit-soft)'; msg.textContent = 'Recovery phrase must be at least 4 characters (or leave it blank).'; return;
+    }
+  }
   const won = state.lastResult === 'win';
   btn.disabled = true; btn.textContent = 'Saving…';
   msg.style.color = 'var(--muted)'; msg.textContent = 'Saving to the global board…';
   // Hard cap the whole operation so the button can never look stuck
   const timeout = new Promise(res => setTimeout(() => res({ ok: false, timeout: true }), 14000));
   let r;
-  try { r = await Promise.race([submitDaily(name, won), timeout]); } catch(e) { r = { ok: false }; }
+  try { r = await Promise.race([submitDaily(name, won, recovery), timeout]); } catch(e) { r = { ok: false }; }
   if (r && r.ok) {
     saveIdentity(name); // remember the claimed name (shared with the lounge)
     // Reconcile local storage with what the server actually has on file for
@@ -3812,6 +3850,12 @@ async function postDailyStreak() {
     cur.streak = Math.max(cur.streak || 0, r.streak || 0);
     saveDailyState(cur);
     applyClaimedName('daily-streak-name', 'daily-name-change');
+    const recInput = document.getElementById('daily-recovery-phrase');
+    if (recInput) recInput.value = '';
+    const recoverySetup = document.getElementById('daily-recovery-setup');
+    if (recoverySetup) recoverySetup.style.display = 'none';
+    const setRecoveryLink = document.getElementById('daily-set-recovery-link');
+    if (setRecoveryLink) setRecoveryLink.style.display = 'inline';
     msg.style.color = 'var(--jab-soft)';
     msg.textContent = r.already
       ? ("Already saved today — 🔥 " + r.best + " best.")
@@ -3832,10 +3876,12 @@ async function postDailyStreak() {
 
 // Claim/verify the name (proves ownership via the browser secret), then record
 // today's result. The server computes the streak — the client never sends a number.
-async function submitDaily(name, won) {
+async function submitDaily(name, won, recovery) {
   if (!hasBackend()) return { ok: false };
   const secret = mySecret();
-  const reg = await apiPostJson('/register', { name, secret });
+  // recovery is only meaningful on a brand-new claim — the server ignores it
+  // once the name already belongs to this secret.
+  const reg = await apiPostJson('/register', recovery ? { name, secret, recovery } : { name, secret });
   if (!reg) return { ok: false };
   if (reg.status === 409) return { ok: false, taken: true };
   if (!reg.ok) return { ok: false };
@@ -3993,6 +4039,70 @@ function restoreDeviceKey(inputId, msgId) {
   if (input) input.value = '';
   applyClaimedName('daily-streak-name', 'daily-name-change');
   renderDailyHomeBadge();
+}
+
+function toggleSetRecoveryPanel() {
+  const el = document.getElementById('daily-set-recovery-panel');
+  if (!el) return;
+  el.style.display = (el.style.display === 'none' || !el.style.display) ? 'block' : 'none';
+}
+// Set/replace the recovery phrase for the name already claimed on this
+// device. Proven by the device's own secret — same authority as any other
+// write to this identity.
+async function setRecoveryPhrase(inputId, msgId) {
+  const input = document.getElementById(inputId);
+  const msg = document.getElementById(msgId);
+  const phrase = (input && input.value || '').trim();
+  const name = getSavedPlayerName();
+  if (!name) return;
+  if (phrase.length < 4) {
+    if (msg) { msg.style.color = 'var(--hit-soft)'; msg.textContent = 'Recovery phrase must be at least 4 characters.'; }
+    return;
+  }
+  if (msg) { msg.style.color = 'var(--muted)'; msg.textContent = 'Saving…'; }
+  const r = await apiPostJson('/recovery-set', { name, secret: mySecret(), recovery: phrase });
+  if (r && r.ok) {
+    if (msg) { msg.style.color = 'var(--jab-soft)'; msg.textContent = 'Recovery phrase set.'; }
+    if (input) input.value = '';
+  } else {
+    if (msg) { msg.style.color = 'var(--hit-soft)'; msg.textContent = "Couldn't save that — try again."; }
+  }
+}
+// Recover a name on a NEW device using the recovery phrase set on the
+// original device, instead of needing that device's exported key. The
+// server verifies the phrase and reassigns the name to this device's secret.
+async function recoverWithPhrase(nameInputId, phraseInputId, msgId) {
+  const nameInput = document.getElementById(nameInputId);
+  const phraseInput = document.getElementById(phraseInputId);
+  const msg = document.getElementById(msgId);
+  const name = (nameInput && nameInput.value || '').trim();
+  const phrase = (phraseInput && phraseInput.value || '').trim();
+  if (!name || !phrase) {
+    if (msg) { msg.style.color = 'var(--hit-soft)'; msg.textContent = 'Enter both your name and recovery phrase.'; }
+    return;
+  }
+  if (msg) { msg.style.color = 'var(--muted)'; msg.textContent = 'Recovering…'; }
+  const secret = mySecret();
+  const r = await apiPostJson('/recover', { name, recovery: phrase, newSecret: secret });
+  if (r && r.ok) {
+    const existing = getIdentity();
+    const uid = existing ? existing.uid : 'u' + Math.random().toString(36).slice(2, 12);
+    const id = { uid, handle: r.data.name || name, secret };
+    try { localStorage.setItem(IDENTITY_KEY, JSON.stringify(id)); } catch(e) {}
+    _cachedSecret = secret;
+    const cur = getDailyState();
+    cur.best = Math.max(cur.best || 0, r.data.best || 0);
+    cur.streak = Math.max(cur.streak || 0, r.data.streak || 0);
+    saveDailyState(cur);
+    if (msg) { msg.style.color = 'var(--jab-soft)'; msg.textContent = 'Recovered ' + (r.data.name || name) + ' on this device.'; }
+    if (nameInput) nameInput.value = '';
+    if (phraseInput) phraseInput.value = '';
+    applyClaimedName('daily-streak-name', 'daily-name-change');
+    renderDailyHomeBadge();
+  } else {
+    const errMsg = (r && r.data && r.data.error) || "Couldn't recover that name — check the phrase and try again.";
+    if (msg) { msg.style.color = 'var(--hit-soft)'; msg.textContent = errMsg; }
+  }
 }
 // Keep the player's claimed name consistent: once claimed, name inputs are
 // prefilled and read-only (no accidental typo-renames) with a deliberate

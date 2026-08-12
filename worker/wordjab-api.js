@@ -468,6 +468,26 @@ export default {
     const EPOCH = Date.UTC(2024, 0, 1);
     const serverDay = () => Math.floor((Date.now() - EPOCH) / 86400000);
 
+    // A claimed name is bound to whatever secret first registered it, with no
+    // other way to prove ownership — fine on one device, but it permanently
+    // locks out a second device (or a browser that lost its storage) with no
+    // recovery path. This adds an optional recovery phrase, set once at claim
+    // time (or later via /recovery-set), that a NEW device can use to
+    // reassign the name to its own secret via /recover — without needing the
+    // original device at all. Only a salted hash is ever stored.
+    const sha256Hex = async (s) => {
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+      return Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, '0')).join('');
+    };
+    const randSaltHex = () => {
+      const a = new Uint8Array(8);
+      crypto.getRandomValues(a);
+      return Array.from(a, b => b.toString(16).padStart(2, '0')).join('');
+    };
+    const hashRecovery = (salt, phrase) => sha256Hex(salt + ':' + phrase.toLowerCase());
+    const RECOVERY_MAX_FAILS = 8;
+    const RECOVERY_COOLDOWN_MS = 60 * 60 * 1000;
+
     const upsertStreak = (data, name, best) => {
       data.dailyStreaks = data.dailyStreaks || [];
       const ex = data.dailyStreaks.find(d => (d.name || '').toLowerCase() === name.toLowerCase());
@@ -486,17 +506,75 @@ export default {
         const b = await request.json();
         const name = clean(b.name, 16).trim();
         const secret = clean(b.secret, 64);
+        const recovery = clean(b.recovery, 32).trim();
         const err = nameError(name);
         if (err) return send({ ok: false, error: err }, 400);
         if (secret.length < 8) return send({ ok: false, error: 'bad secret' }, 400);
         const nl = name.toLowerCase();
         const existing = await loadId(nl);
         if (existing) {
-          if (existing.secret === secret) return send({ ok: true, existing: true, name: existing.name, streak: existing.streak || 0, best: existing.best || 0 });
+          if (existing.secret === secret) return send({ ok: true, existing: true, name: existing.name, streak: existing.streak || 0, best: existing.best || 0, hasRecovery: !!existing.recoveryHash });
           return send({ ok: false, error: 'That name is taken.' }, 409);
         }
-        await saveId(nl, { name, secret, streak: 0, best: 0, lastDay: 0, createdTs: Date.now() });
-        return send({ ok: true, existing: false, name, streak: 0, best: 0 });
+        const rec = { name, secret, streak: 0, best: 0, lastDay: 0, createdTs: Date.now() };
+        // Only meaningful on a brand-new claim — an existing name keeps
+        // whatever recovery phrase it already has (set via /recovery-set).
+        if (recovery.length >= 4) {
+          const salt = randSaltHex();
+          rec.recoverySalt = salt;
+          rec.recoveryHash = await hashRecovery(salt, recovery);
+        }
+        await saveId(nl, rec);
+        return send({ ok: true, existing: false, name, streak: 0, best: 0, hasRecovery: !!rec.recoveryHash });
+      }
+
+      if (url.pathname === '/recovery-set' && request.method === 'POST') {
+        const b = await request.json();
+        const name = clean(b.name, 16).trim();
+        const secret = clean(b.secret, 64);
+        const recovery = clean(b.recovery, 32).trim();
+        const nl = name.toLowerCase();
+        const rec = await loadId(nl);
+        if (!rec || rec.secret !== secret) return send({ ok: false, error: 'not your name' }, 403);
+        if (recovery.length < 4) return send({ ok: false, error: 'Recovery phrase must be at least 4 characters.' }, 400);
+        const salt = randSaltHex();
+        rec.recoverySalt = salt;
+        rec.recoveryHash = await hashRecovery(salt, recovery);
+        await saveId(nl, rec);
+        return send({ ok: true });
+      }
+
+      // Reassign an already-claimed name to a NEW device's secret, proven by
+      // the recovery phrase instead of the original device's secret. This is
+      // the only account-recovery path that exists (no login/email), so it's
+      // throttled per-name against brute-forcing a low-entropy phrase.
+      if (url.pathname === '/recover' && request.method === 'POST') {
+        const b = await request.json();
+        const name = clean(b.name, 16).trim();
+        const recovery = clean(b.recovery, 32).trim();
+        const newSecret = clean(b.newSecret, 64);
+        if (newSecret.length < 8) return send({ ok: false, error: 'bad secret' }, 400);
+        const nl = name.toLowerCase();
+        const rec = await loadId(nl);
+        if (!rec || !rec.recoveryHash) return send({ ok: false, error: 'No recovery phrase set for this name.' }, 404);
+
+        const now = Date.now();
+        const cooling = (rec.recoveryFails || 0) >= RECOVERY_MAX_FAILS && now - (rec.recoveryFailAt || 0) < RECOVERY_COOLDOWN_MS;
+        if (cooling) return send({ ok: false, error: 'Too many attempts — try again later.' }, 429);
+
+        const candidate = await hashRecovery(rec.recoverySalt, recovery);
+        if (candidate !== rec.recoveryHash) {
+          const withinWindow = now - (rec.recoveryFailAt || 0) < RECOVERY_COOLDOWN_MS;
+          rec.recoveryFails = withinWindow ? (rec.recoveryFails || 0) + 1 : 1;
+          rec.recoveryFailAt = now;
+          await saveId(nl, rec);
+          return send({ ok: false, error: 'Wrong recovery phrase.' }, 403);
+        }
+
+        rec.secret = newSecret;
+        rec.recoveryFails = 0;
+        await saveId(nl, rec);
+        return send({ ok: true, name: rec.name, streak: rec.streak || 0, best: rec.best || 0 });
       }
 
       if (url.pathname === '/daily' && request.method === 'POST') {
