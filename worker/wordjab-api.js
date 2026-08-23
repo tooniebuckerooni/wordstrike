@@ -589,15 +589,21 @@ export default {
         let today = num(b.day);
         if (!today || Math.abs(today - utcDay) > 1) today = utcDay;
         const alreadyToday = rec.lastDay === today;
-        // Name is reserved to this browser's secret, so trust its streak/best
-        // for this owned entry (sanity-capped). Name ownership still blocks
-        // touching anyone else's entry.
-        rec.streak = Math.max(0, Math.min(3650, num(b.streak)));
-        rec.best = Math.max(rec.best || 0, Math.max(0, Math.min(3650, num(b.best))));
+        // The streak is computed here from the record's own day history —
+        // NOT trusted from the client — so a browser can no longer just POST
+        // an arbitrary streak/best to fake the leaderboard. `lastDay` has
+        // always been server-maintained (the client only ever supplied a
+        // hint used to sanity-check clock skew above), so switching to
+        // deriving streak/best from it picks up exactly where every existing
+        // record already was — no reset, no discontinuity for current users.
         const week = Math.floor(today / 7);
-        if (rec.weekIndex !== week) { rec.weekIndex = week; rec.weekWins = 0; }
-        if (won && !alreadyToday) rec.weekWins = (rec.weekWins || 0) + 1;
-        rec.lastDay = today;
+        if (!alreadyToday) {
+          rec.streak = won ? (rec.lastDay === today - 1 ? (rec.streak || 0) + 1 : 1) : 0;
+          rec.best = Math.max(rec.best || 0, rec.streak);
+          if (rec.weekIndex !== week) { rec.weekIndex = week; rec.weekWins = 0; }
+          if (won) rec.weekWins = (rec.weekWins || 0) + 1;
+          rec.lastDay = today;
+        }
         await saveId(nl, rec);
         const data = await loadLB();
         if (rec.best > 0) upsertStreak(data, rec.name, rec.best);
