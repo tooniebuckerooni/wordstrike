@@ -28,4 +28,5 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           workingDirectory: worker
-          command: deploy${{ github.event_name == 'pull_request' && ' --dry-run' || '' }}
+          wranglerVersion: '4'
+          command: deploy wordjab-api.js${{ github.event_name == 'pull_request' && ' --dry-run' || '' }}
