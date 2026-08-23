@@ -1,0 +1,30 @@
+{
+  // Fill in "account_id" and the KV namespace "id" below before the first
+  // deploy from CI — this file does nothing until both are real values.
+  //
+  //   account_id: Cloudflare dashboard -> Workers & Pages -> right sidebar
+  //               ("Account ID"). Not secret, safe to commit.
+  //
+  //   kv id:      Cloudflare dashboard -> Workers & Pages -> KV -> click the
+  //               namespace already bound to the wordjab-api Worker as
+  //               "LEADERBOARD" -> copy its ID.
+  //
+  //   IMPORTANT: get the KV id right. A wrong or placeholder id makes
+  //   `wrangler deploy` bind a brand-new EMPTY namespace instead of the
+  //   real one, which would silently orphan every registered name and
+  //   streak already stored in production. Double-check it against the
+  //   dashboard, don't guess it.
+  //
+  //   "name" below must match the existing Worker's name in the dashboard
+  //   (Workers & Pages -> Overview) — deploying under a different name
+  //   creates a second, separate Worker instead of updating the live one.
+  //   wordjab-api.dustinramsbottom.workers.dev implies the name is
+  //   "wordjab-api", but confirm it in the dashboard before the first push.
+  "name": "wordjab-api",
+  "main": "wordjab-api.js",
+  "compatibility_date": "2024-01-01",
+  "account_id": "REPLACE_WITH_YOUR_CLOUDFLARE_ACCOUNT_ID",
+  "kv_namespaces": [
+    { "binding": "LEADERBOARD", "id": "REPLACE_WITH_EXISTING_KV_NAMESPACE_ID" }
+  ]
+}

@@ -1,0 +1,31 @@
+name: Deploy Worker
+
+# Makes GitHub the source of truth for the wordjab-api Worker instead of the
+# Cloudflare dashboard editor. A push to main that touches worker/** deploys
+# for real; a pull request that touches worker/** runs `wrangler deploy
+# --dry-run` first so a broken config/script fails the PR check instead of
+# failing silently at deploy time.
+#
+# Requires one repo secret: CLOUDFLARE_API_TOKEN (Workers Scripts: Edit
+# permission, scoped to this account only). Until that secret exists, every
+# run here fails — harmlessly, since a failed `wrangler deploy` never
+# touches the live Worker. The Cloudflare dashboard stays untouched by CI
+# either way and remains the emergency rollback surface.
+
+on:
+  push:
+    branches: [main]
+    paths: ['worker/**']
+  pull_request:
+    paths: ['worker/**']
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          workingDirectory: worker
+          command: deploy${{ github.event_name == 'pull_request' && ' --dry-run' || '' }}
