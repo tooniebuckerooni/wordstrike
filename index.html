@@ -3894,13 +3894,9 @@ async function submitDaily(name, won, recovery) {
   if (!reg) return { ok: false };
   if (reg.status === 409) return { ok: false, taken: true };
   if (!reg.ok) return { ok: false };
-  // Send our device's streak/best — the server trusts them for our own
-  // (name-owned) entry so the board matches what the player sees.
-  const st = getDailyState();
-  const d = await apiPostJson('/daily', {
-    name, secret, won, day: localDayNumber(),
-    streak: st.streak || 0, best: st.best || 0
-  });
+  // The server computes streak/best itself from this identity's own day
+  // history — it no longer trusts a client-supplied number.
+  const d = await apiPostJson('/daily', { name, secret, won, day: localDayNumber() });
   if (!d || !d.ok) return { ok: false };
   return { ok: true, streak: d.data.streak || 0, best: d.data.best || 0, already: !!d.data.already };
 }
