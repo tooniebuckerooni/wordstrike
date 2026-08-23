@@ -3864,8 +3864,17 @@ async function postDailyStreak() {
     loadSharedLeaderboard(); // reflect it on the board right away
   } else if (r && r.taken) {
     msg.style.color = 'var(--hit-soft)';
-    msg.textContent = 'That name is taken. Pick another.';
+    msg.textContent = 'That name is already yours on another device? Enter your recovery phrase below to pick it back up here — or use a different name.';
     btn.disabled = false; btn.textContent = 'Save 🔥';
+    // Surface the recovery form immediately instead of leaving her to find
+    // the "used this name elsewhere?" link on her own — this IS the moment
+    // it's needed.
+    const recoverPanel = document.getElementById('daily-recover-panel');
+    if (recoverPanel) recoverPanel.style.display = 'block';
+    const recoverName = document.getElementById('daily-recover-name');
+    if (recoverName) recoverName.value = name;
+    const recoverPhrase = document.getElementById('daily-recover-phrase');
+    if (recoverPhrase) recoverPhrase.focus();
   } else {
     msg.style.color = 'var(--hit-soft)';
     const detail = _lastBinStatus ? ' [' + _lastBinStatus + ']' : '';
@@ -4094,11 +4103,18 @@ async function recoverWithPhrase(nameInputId, phraseInputId, msgId) {
     cur.best = Math.max(cur.best || 0, r.data.best || 0);
     cur.streak = Math.max(cur.streak || 0, r.data.streak || 0);
     saveDailyState(cur);
-    if (msg) { msg.style.color = 'var(--jab-soft)'; msg.textContent = 'Recovered ' + (r.data.name || name) + ' on this device.'; }
+    if (msg) { msg.style.color = 'var(--jab-soft)'; msg.textContent = 'Recovered ' + (r.data.name || name) + ' — saving today’s result…'; }
     if (nameInput) nameInput.value = '';
     if (phraseInput) phraseInput.value = '';
     applyClaimedName('daily-streak-name', 'daily-name-change');
     renderDailyHomeBadge();
+    const recoverPanel = document.getElementById('daily-recover-panel');
+    if (recoverPanel) recoverPanel.style.display = 'none';
+    // She was mid-Save when this got triggered — finish the job instead of
+    // making her notice and click Save again.
+    if (document.getElementById('screen-daily-result').classList.contains('active')) {
+      postDailyStreak();
+    }
   } else {
     const errMsg = (r && r.data && r.data.error) || "Couldn't recover that name — check the phrase and try again.";
     if (msg) { msg.style.color = 'var(--hit-soft)'; msg.textContent = errMsg; }
