@@ -4,7 +4,9 @@ name: Deploy Worker
 # Cloudflare dashboard editor. A push to main that touches worker/** deploys
 # for real; a pull request that touches worker/** runs `wrangler deploy
 # --dry-run` first so a broken config/script fails the PR check instead of
-# failing silently at deploy time.
+# failing silently at deploy time. Can also be run manually from the Actions
+# tab (or via API) for cases like re-running after a workflow-file-only fix,
+# where no worker/** file actually changed.
 #
 # Requires one repo secret: CLOUDFLARE_API_TOKEN (Workers Scripts: Edit
 # permission, scoped to this account only). Until that secret exists, every
@@ -18,6 +20,7 @@ on:
     paths: ['worker/**']
   pull_request:
     paths: ['worker/**']
+  workflow_dispatch: {}
 
 jobs:
   deploy:
