@@ -3504,7 +3504,18 @@ const DAILY_WORDS = ['JACKPOT','TAVERN','HUSTLE','BANTER','RACKET','SHUFFLE','GU
   'UNDERWEAR','UNICYCLE','UNIFORM','URCHIN','VACUUM','VASSAL','VELOUR','VINEYARD','VIOLA','VIOLIN',
   'VIPER','VOLLEY','VORTEX','VOYAGER','WAISTCOAT','WALLPAPER','WALRUS','WATERFALL','WEIGHIN','WHALEBONE',
   'WHIRLWIND','WHITTLE','WICKET','WIZARDRY','WOODWIND','XYLOPHONE','YARDSTICK','YOGURT','ZEBRA','ZIPPER',
-  'ZITHER'];
+  'ZITHER',
+  // Second batch — mined from a common-word frequency list, filtered to real
+  // dictionary words not already used anywhere in this file, scored below
+  // the difficulty threshold used for DAILY_WORDS_HARD (see below).
+  'SHOVEL','TOOTHBRUSH','WILDFIRE','KARATE','BROCCOLI','SCAFFOLD','WHEELCHAIR','FENCING',
+  'FOOTPRINT','TRUMPET','MEATBALL','WRISTWATCH','PELICAN','BAGEL','SPINACH','NEWSPAPER',
+  'TRICYCLE','WINDMILL','BONGOS','WINDSHIELD','BURRITO','HEADPHONES','SPACESHIP','WATCHTOWER',
+  'HURRICANE','SPATULA','DAYDREAM','SANDSTORM','CYCLONE','CROSSWORD','CUSHION','TSUNAMI',
+  'PINGPONG','MONGOOSE','STAPLER','GEYSER','BOBCAT','POPCORN','STARFISH','TRIPOD','CASHEW',
+  'TRAPDOOR','LACROSSE','TOUCAN','THERMOS','SAUSAGE','MARACAS','AIRPORT','TAILGATE','COYOTE',
+  'RAINCOAT','TREEHOUSE','HUMMUS','NACHOS','TOFU','MATTRESS','OCELOT','TORNADO','CELLO',
+  'LLAMA','NEWT','TACO'];
 // Ambient difficulty bump: ordinary, recognizable words chosen for
 // mechanically-tricky letters (this game's only real difficulty lever is
 // distinct letters vs. the fixed 6-miss budget), not obscure vocabulary —
@@ -3515,13 +3526,26 @@ const DAILY_WORDS = ['JACKPOT','TAVERN','HUSTLE','BANTER','RACKET','SHUFFLE','GU
 // Starter batch — expand freely, same curation rule (common word, tricky
 // letters) applies to additions.
 const DAILY_WORDS_HARD = ['HIGHWAY','COWBOY','VINTAGE','VACANCY','VOLTAGE','WOODWORK','KNICKERS',
-  'WORKOUT','MOHAWK','KICKBACK','WALKWAY','WHISKEY','WEBWORK','YEARBOOK','KNOWLEDGE'];
+  'WORKOUT','MOHAWK','KICKBACK','WALKWAY','WHISKEY','WEBWORK','YEARBOOK','KNOWLEDGE',
+  // Second batch — same scoring/dedup pipeline as the DAILY_WORDS batch above.
+  'BACKFLIP','FLASHBACK','WORKBENCH','PITCHFORK','BACKYARD','SHIPWRECK','BLACKOUT','PATCHWORK',
+  'WOODPECKER','SKYSCRAPER','WAKEBOARD','BOOKWORM','BACKSTROKE','SNOWFLAKE','OUTBACK','PLAYGROUND',
+  'SKATEBOARD','CHECKPOINT','PADLOCK','PUMPKIN','MICROWAVE','BUCKET','MOONWALK','CUPCAKE',
+  'KAYAKING','SIDEWALK','FIREWORK','HOMEWORK','PICKLE','CLIPBOARD','LANDMARK','CORKSCREW',
+  'CUPBOARD','KICKSTAND','NICKNAME','CHECKMATE','HOCKEY','PEACOCK','OVERBOARD','TAMBOURINE',
+  'CYMBAL','SURFBOARD','BOWLING','BOOMERANG','GUACAMOLE','PILLOWCASE','SUNFLOWER','HANDSHAKE',
+  'KEBAB','AVALANCHE','SNOWBOARD','PLATYPUS','KNICKKNACK','DUMBBELL','HANDCUFFS','DODGEBALL',
+  'WRESTLING','WALLABY','TYPEWRITER','TOUCHDOWN','PORCUPINE','FLASHLIGHT','WOMBAT','PANGOLIN','KIWI'];
 // "Hard Word Sunday" — a distinctly tougher, separate weekly pool (own
 // cycle, see getDailyWord) rather than part of the ~1-in-7 ambient bump
 // above. Every word here scores well above the hardest word already in
 // DAILY_WORDS on the same distinct-rare-letter metric. Starter batch.
 const SUNDAY_HARD_WORDS = ['FOXHOLE','JUGGLER','WAXWORK','JAYWALK','JACKRABBIT','QUACK','ZEALOT',
-  'ZIGZAG','ZODIAC','WIZARD','ZIPLINE','ZUCCHINI','ZOMBIE','KAZOO','BUZZWORD','QUIZ'];
+  'ZIGZAG','ZODIAC','WIZARD','ZIPLINE','ZUCCHINI','ZOMBIE','KAZOO','BUZZWORD','QUIZ',
+  // Second batch — same scoring/dedup pipeline as the DAILY_WORDS batch above.
+  'GAZPACHO','BUZZARD','MARZIPAN','ZEBU','QUICKSTEP','KUMQUAT','EARTHQUAKE','CROQUET','SQUID',
+  'KICKBOXING','JACKFRUIT','MUSKOX','LUNCHBOX','JUGGLING','JOYRIDE','PAJAMAS','TOOLBOX','JAGUAR',
+  'BANJO','JOGGING','TUXEDO','LYNX','JUDO'];
 const DAILY_KEY = 'wj_daily_v1';
 const DAILY_ROUNDS = 6;
 
@@ -3652,6 +3676,7 @@ let dailyWrong = new Set();
 let dailyRoundsLeft = DAILY_ROUNDS;
 let dailyDone = false;
 let dailyPlayDate = null; // the calendar day this round's word belongs to (pinned at open, not re-read at finish)
+let dailyIsHardSunday = false; // pinned alongside dailyPlayDate, same reason — a session spanning midnight shouldn't relabel itself mid-round
 
 function setFeedbackEl(id, msg, type) {
   const el = document.getElementById(id);
@@ -3671,6 +3696,8 @@ function renderDailyHomeBadge() {
   }
   if (state.lastPlayedDate === todayStr()) {
     subEl.textContent = state.lastResult === 'win' ? "Cracked today's word. Come back tomorrow." : "Today's jab is done. Come back tomorrow.";
+  } else if (new Date().getDay() === 0) {
+    subEl.textContent = '💥 Hard Word Sunday — today’s jab is tougher than usual.';
   } else {
     subEl.textContent = 'One word. Six rounds. Today’s fight.';
   }
@@ -3680,11 +3707,13 @@ function openDailyJab() {
   const state = getDailyState();
   const today = todayStr();
   if (state.lastPlayedDate === today) {
+    dailyIsHardSunday = SUNDAY_HARD_WORDS.includes(getDailyWord());
     showDailyResultScreen(state.lastResult === 'win', getDailyWord(), state.lastRoundsLeft||0, state);
     return;
   }
   const word = getDailyWord();
   dailyPlayDate = today;
+  dailyIsHardSunday = SUNDAY_HARD_WORDS.includes(word);
   dailyTiles = word.split('').map(ch => ({ char: ch, revealed: false }));
   dailyWrong = new Set();
   dailyRoundsLeft = DAILY_ROUNDS;
@@ -3695,7 +3724,8 @@ function openDailyJab() {
 
 function renderDailyPlay() {
   const subEl = document.getElementById('daily-play-sub');
-  subEl.textContent = dailyTiles.length + ' letters · ' + dailyRoundsLeft + ' jab' + (dailyRoundsLeft===1?'':'s') + ' left';
+  subEl.textContent = (dailyIsHardSunday ? '💥 Hard Word Sunday · ' : '') +
+    dailyTiles.length + ' letters · ' + dailyRoundsLeft + ' jab' + (dailyRoundsLeft===1?'':'s') + ' left';
 
   const pipsEl = document.getElementById('daily-pips');
   pipsEl.innerHTML = '';
@@ -3793,9 +3823,10 @@ function showDailyResultScreen(won, word, roundsLeft, state) {
   const titleEl = document.getElementById('daily-result-title');
   titleEl.textContent = won ? 'Knockout!' : 'Down for the count';
   titleEl.className = 'daily-result-title ' + (won ? 'win' : 'lose');
-  document.getElementById('daily-result-sub').textContent = won
+  const sundayTag = dailyIsHardSunday ? '💥 Hard Word Sunday — ' : '';
+  document.getElementById('daily-result-sub').textContent = sundayTag + (won
     ? ('Cracked it with ' + roundsLeft + ' jab' + (roundsLeft===1?'':'s') + ' to spare.')
-    : ('Today’s word was ' + word.toUpperCase() + '.');
+    : ('Today’s word was ' + word.toUpperCase() + '.'));
 
   const tilesEl = document.getElementById('daily-result-tiles');
   tilesEl.innerHTML = '';
