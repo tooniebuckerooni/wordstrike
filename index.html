@@ -3505,6 +3505,23 @@ const DAILY_WORDS = ['JACKPOT','TAVERN','HUSTLE','BANTER','RACKET','SHUFFLE','GU
   'VIPER','VOLLEY','VORTEX','VOYAGER','WAISTCOAT','WALLPAPER','WALRUS','WATERFALL','WEIGHIN','WHALEBONE',
   'WHIRLWIND','WHITTLE','WICKET','WIZARDRY','WOODWIND','XYLOPHONE','YARDSTICK','YOGURT','ZEBRA','ZIPPER',
   'ZITHER'];
+// Ambient difficulty bump: ordinary, recognizable words chosen for
+// mechanically-tricky letters (this game's only real difficulty lever is
+// distinct letters vs. the fixed 6-miss budget), not obscure vocabulary —
+// e.g. KNOWLEDGE is common but has more distinct rare letters than a typical
+// DAILY_WORDS entry. Interleaved into the normal rotation (~1 in 7 days,
+// see buildWordOrder) rather than replacing anything in DAILY_WORDS above —
+// nothing existing is removed or skipped, this only adds days.
+// Starter batch — expand freely, same curation rule (common word, tricky
+// letters) applies to additions.
+const DAILY_WORDS_HARD = ['HIGHWAY','COWBOY','VINTAGE','VACANCY','VOLTAGE','WOODWORK','KNICKERS',
+  'WORKOUT','MOHAWK','KICKBACK','WALKWAY','WHISKEY','WEBWORK','YEARBOOK','KNOWLEDGE'];
+// "Hard Word Sunday" — a distinctly tougher, separate weekly pool (own
+// cycle, see getDailyWord) rather than part of the ~1-in-7 ambient bump
+// above. Every word here scores well above the hardest word already in
+// DAILY_WORDS on the same distinct-rare-letter metric. Starter batch.
+const SUNDAY_HARD_WORDS = ['FOXHOLE','JUGGLER','WAXWORK','JAYWALK','JACKRABBIT','QUACK','ZEALOT',
+  'ZIGZAG','ZODIAC','WIZARD','ZIPLINE','ZUCCHINI','ZOMBIE','KAZOO','BUZZWORD','QUIZ'];
 const DAILY_KEY = 'wj_daily_v1';
 const DAILY_ROUNDS = 6;
 
@@ -3555,6 +3572,26 @@ const WORD_SCHEDULE_START = new Date(2026, 7, 3); // day the shuffle-based picke
 // coincidentally place the same word near both ends of the boundary between
 // them, so the actual minimum gap has to be re-verified, not assumed. Fixing
 // the order once removes that risk by construction instead of by luck.
+// Splices one word from hardPool into `order` after every `everyN` entries —
+// an INSERT, not a swap, so every word already in `order` still gets its day
+// exactly once per cycle; this only makes the cycle ~1/everyN longer. Cycles
+// hardPool itself (reshuffled each lap) once exhausted, same as the main
+// list eventually repeating.
+function interleaveHard(order, hardPool, seed, everyN) {
+  if (!hardPool.length) return order.slice();
+  const hardShuffled = shuffledOrder(seed, hardPool.length).map(i => hardPool[i]);
+  const out = [];
+  let hardIdx = 0;
+  order.forEach((w, i) => {
+    out.push(w);
+    if ((i + 1) % everyN === 0) {
+      out.push(hardShuffled[hardIdx % hardShuffled.length]);
+      hardIdx++;
+    }
+  });
+  return out;
+}
+
 function buildWordOrder() {
   const recent = new Set(RECENTLY_USED_PRE_FIX);
   const shown = new Set(ALREADY_SHOWN);
@@ -3562,14 +3599,26 @@ function buildWordOrder() {
   const fresh = DAILY_WORDS.filter(w => !recent.has(w) && !shown.has(w));
   const freshOrder = shuffledOrder(9001, fresh.length).map(i => fresh[i]);
   const staleOrder = shuffledOrder(9002, stale.length).map(i => stale[i]);
-  return ALREADY_SHOWN.concat(freshOrder, staleOrder);
+  // 1 hard word inserted every 6 normal ones ≈ 1-in-7 days (~14%).
+  const rotation = interleaveHard(freshOrder.concat(staleOrder), DAILY_WORDS_HARD, 9003, 6);
+  return ALREADY_SHOWN.concat(rotation);
 }
 const WORD_ORDER = buildWordOrder();
+// Sunday's own weekly-indexed cycle through the tougher pool — entirely
+// separate from WORD_ORDER above, so it never displaces a normal-rotation
+// day; that day's regular word just lands on its next lap through the cycle.
+const SUNDAY_WORD_ORDER = shuffledOrder(9004, SUNDAY_HARD_WORDS.length).map(i => SUNDAY_HARD_WORDS[i]);
 
 function getDailyWord() {
   const now = new Date(); now.setHours(0,0,0,0);
   const start = new Date(WORD_SCHEDULE_START); start.setHours(0,0,0,0);
   const offset = Math.max(0, Math.floor((now - start) / 86400000));
+  // Hard Word Sunday — player's local Sunday (matches this function's local-
+  // day basis throughout), a separate weekly-indexed pool.
+  if (now.getDay() === 0 && SUNDAY_WORD_ORDER.length) {
+    const sundayOffset = Math.floor(offset / 7);
+    return SUNDAY_WORD_ORDER[sundayOffset % SUNDAY_WORD_ORDER.length];
+  }
   return WORD_ORDER[offset % WORD_ORDER.length];
 }
 
