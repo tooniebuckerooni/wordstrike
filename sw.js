@@ -1,5 +1,5 @@
 // WordJab service worker — bump CACHE version when shipping breaking changes
-const CACHE = 'wordjab-v3';
+const CACHE = 'wordjab-v4';
 const PRECACHE = [
   '/',
   '/icon-192.png',
@@ -33,7 +33,7 @@ self.addEventListener('fetch', e => {
   // Pages: network-first so game updates land immediately; cache when offline
   if (e.request.mode === 'navigate') {
     e.respondWith(
-      fetch(e.request)
+      fetch(new Request(e.request, { cache: 'no-store' }))
         .then(r => {
           const copy = r.clone();
           caches.open(CACHE).then(c => c.put('/', copy));
