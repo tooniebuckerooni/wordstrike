@@ -5236,7 +5236,17 @@ window.addEventListener('beforeunload', () => {
 // PWA offline support (Daily Jab works offline; https only so local dev is unaffected)
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
+    const SERVICE_WORKER_BUILD = '2026-08-30-1';
+    let reloadingForServiceWorker = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!reloadingForServiceWorker) {
+        reloadingForServiceWorker = true;
+        window.location.reload();
+      }
+    });
+    navigator.serviceWorker.register('/sw.js?build=' + SERVICE_WORKER_BUILD, { updateViaCache: 'none' })
+      .then(registration => registration.update())
+      .catch(() => {});
   });
 }
 </script>
