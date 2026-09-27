@@ -59,6 +59,14 @@ function corrId() {
   return 'g' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
+// A name's record can be held by several devices at once: `secret` is the
+// one that first claimed it, `secrets` holds every other device that has
+// since signed in with the name's password. Any of them proves ownership.
+function idOwns(rec, secret) {
+  if (!rec || !secret) return false;
+  return rec.secret === secret || (Array.isArray(rec.secrets) && rec.secrets.includes(secret));
+}
+
 // Claim/verify a name via the shared id:<lower> record. Returns { ok:true } if
 // the caller owns the name (or it was free and is now theirs), or { taken:true }
 // if a different secret already holds it. Fresh claims are written in the SAME
@@ -69,7 +77,7 @@ async function corrOwnName(env, name, secret) {
   const key = 'id:' + lower;
   let rec = null;
   try { rec = await env.LEADERBOARD.get(key, 'json'); } catch (e) {}
-  if (rec && rec.secret && rec.secret !== secret) return { taken: true };
+  if (rec && rec.secret && !idOwns(rec, secret)) return { taken: true };
   if (!rec) {
     rec = {
       name, secret, streak: 0, best: 0, lastDay: 0,

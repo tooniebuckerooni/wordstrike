@@ -132,7 +132,7 @@
   .screen.active { display: block; }
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 1.25rem; margin-bottom: 1rem; }
   label { display: block; font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 5px; margin-top: 12px; }
-  input[type=text], input[type=number], select {
+  input[type=text], input[type=password], input[type=number], select {
     width: 100%; padding: 0.6rem 0.75rem; border-radius: 8px;
     border: 1px solid var(--line); background: var(--inset); color: var(--paper); font-size: 1rem; font-family: 'Work Sans', sans-serif;
   }
@@ -366,6 +366,18 @@
   .lb-key-row input { flex: 1; font-size: 0.8rem; padding: 0.4rem 0.6rem; }
   .lb-key-row button { font-size: 0.78rem; padding: 0.4rem 0.75rem; background: var(--jab); color: #1a1106; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; }
   .lb-empty { text-align: center; color: var(--muted); font-size: 0.8rem; padding: 1rem 0; }
+  .home-h { font-family: 'Anton', sans-serif; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted-2); margin-bottom: 0.4rem; }
+  .home-p { font-size: 0.78rem; color: var(--muted); margin-bottom: 0.6rem; }
+  .acct-form { display: flex; gap: 6px; flex-wrap: wrap; }
+  .acct-form input { flex: 1 1 140px; min-width: 0; font-size: 0.9rem; padding: 0.45rem 0.6rem; }
+  .acct-form button { flex: 1 1 100%; }
+  .acct-msg { font-size: 0.74rem; min-height: 1rem; margin-top: 0.35rem; color: var(--muted); }
+  .acct-msg.ok { color: var(--jab-soft); }
+  .acct-msg.err { color: var(--hit-soft); }
+  .acct-link { font-size: 0.7rem; color: var(--muted); }
+  .acct-row { display: flex; align-items: center; gap: 6px; font-size: 0.95rem; flex-wrap: wrap; }
+  .acct-streak { font-size: 0.8rem; color: var(--jab-soft); font-weight: 600; }
+  .lb-you { background: var(--jab-tint); border: 0.5px solid var(--jab); border-radius: 8px; padding: 6px 10px; font-size: 0.78rem; margin-bottom: 10px; text-align: center; }
   .corr-match-row {
     display: flex; align-items: center; justify-content: space-between; gap: 8px;
     width: 100%; text-align: left; padding: 8px 10px; margin-bottom: 5px;
@@ -536,6 +548,47 @@
 
 <!-- HOME -->
 <div id="screen-home" class="screen active">
+  <!-- 1. ACCOUNT — your streak lives on the server, tied to this sign-in -->
+  <div class="card" id="account-card">
+    <div id="account-out">
+      <h2 class="home-h">👤 Sign in</h2>
+      <p class="home-p">Pick a fight name and password to keep your Daily Jab streak on every device — even if your phone clears its data. Already have a name? Same form signs you back in.</p>
+      <form class="acct-form" onsubmit="accountSubmit('acct');return false;">
+        <input type="text" id="acct-name" placeholder="fight name" maxlength="16" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false">
+        <input type="password" id="acct-pw" placeholder="password (4+ characters)" maxlength="32" autocomplete="current-password">
+        <button type="submit" class="btn-primary btn-sm" id="acct-btn">Sign in / Create</button>
+      </form>
+      <div id="acct-msg" class="acct-msg" aria-live="polite"></div>
+      <div style="text-align:center;margin-top:4px;"><a href="#" class="acct-link" onclick="toggleRecoverPanel('acct-legacy');return false;">claimed a name before passwords existed?</a></div>
+      <div id="acct-legacy" style="display:none;margin-top:0.5rem;">
+        <p class="home-p" style="margin-bottom:0.3rem;">Open WordJab on the device you claimed it on and set a password there (it's in this card). Or paste a device key you copied from it:</p>
+        <div class="lb-key-row">
+          <input type="text" id="acct-key-input" placeholder="paste device key" autocomplete="off">
+          <button onclick="restoreDeviceKey('acct-key-input','acct-key-msg')">Restore</button>
+        </div>
+        <div id="acct-key-msg" class="acct-msg" aria-live="polite"></div>
+      </div>
+    </div>
+    <div id="account-in" style="display:none;">
+      <div class="acct-row">
+        <span aria-hidden="true">🥊</span> <b id="acct-you"></b>
+        <span id="acct-streak" class="acct-streak"></span>
+        <a href="#" class="acct-link" style="margin-left:auto;" onclick="signOut();return false;">sign out</a>
+      </div>
+      <div id="acct-status" class="acct-msg" aria-live="polite"></div>
+      <div id="acct-setpw" style="display:none;margin-top:0.5rem;">
+        <p class="home-p" style="margin-bottom:0;" id="acct-setpw-label">Set a password so you can sign in on your other devices — including the home-screen app, which keeps separate storage from Safari.</p>
+        <div class="lb-key-row">
+          <input type="password" id="acct-setpw-input" placeholder="new password (4+ characters)" maxlength="32" autocomplete="new-password">
+          <button onclick="setRecoveryPhrase('acct-setpw-input','acct-setpw-msg')">Set</button>
+        </div>
+        <div id="acct-setpw-msg" class="acct-msg" aria-live="polite"></div>
+      </div>
+      <div style="text-align:right;margin-top:2px;" id="acct-changepw-wrap"><a href="#" class="acct-link" onclick="toggleRecoverPanel('acct-setpw');return false;">change password</a></div>
+    </div>
+  </div>
+
+  <!-- 2. INVITES — anything waiting on you -->
   <div class="card" id="resume-card" style="display:none;border-color:var(--jab);">
     <div style="font-weight:700;margin-bottom:0.25rem;">🔄 Game in progress</div>
     <p id="resume-card-text" style="color:var(--muted);font-size:0.85rem;margin-bottom:0.75rem;"></p>
@@ -544,6 +597,51 @@
       <button class="btn-secondary btn-sm" id="resume-dismiss-btn">Dismiss</button>
     </div>
   </div>
+  <div class="card" id="corr-card">
+    <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:0.3rem;flex-wrap:wrap;">
+      <h2 class="home-h" style="margin:0;">📬 Invites &amp; your games</h2>
+      <span id="corr-turn-badge" style="font-size:0.72rem;color:var(--jab-soft);font-weight:600;"></span>
+    </div>
+    <div id="corr-list" aria-live="polite" style="margin-top:0.5rem;"></div>
+    <p id="games-empty" class="home-p" style="margin:0.25rem 0 0;">No games waiting on you. Got a code from a friend? Jump in:</p>
+    <div class="btn-row" style="margin-top:0.6rem;">
+      <button class="btn-secondary btn-sm" onclick="showScreen('screen-join')" style="flex:1;">🔑 Join live game</button>
+      <button class="btn-secondary btn-sm" onclick="openCorrJoin()" style="flex:1;">✉️ Join mail match</button>
+    </div>
+  </div>
+
+  <!-- 3. START A GAME WITH FRIENDS -->
+  <div class="card">
+    <h2 class="home-h">🌐 Start a game with friends</h2>
+    <div class="play-type-cards" style="margin-bottom:0.75rem;">
+      <div class="play-type-card" role="button" tabindex="0" aria-label="Host live — get a 4-letter code to share" onclick="showScreen('screen-online-setup')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showScreen('screen-online-setup');}">
+        <div class="icon" aria-hidden="true">⚡</div>
+        <h3>Host live</h3>
+        <p>Everyone online now. Get a 4-letter code to share.</p>
+      </div>
+      <div class="play-type-card" role="button" tabindex="0" aria-label="Play by mail — turn-by-turn match friends can answer any time" onclick="openCorrNew()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openCorrNew();}">
+        <div class="icon" aria-hidden="true">📮</div>
+        <h3>Play by mail</h3>
+        <p>Turn-by-turn. Move, close the app, come back when it's your turn.</p>
+      </div>
+    </div>
+    <div class="play-type-card" role="button" tabindex="0" aria-label="Same Device — everyone plays on one screen, pass and play" onclick="chooseLocal()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();chooseLocal();}">
+      <div class="icon" aria-hidden="true">🖥️</div>
+      <h3>Same device</h3>
+      <p>Everyone plays on one screen. Pass and play.</p>
+    </div>
+  </div>
+
+  <!-- 4. SPAR WITH THE BOT -->
+  <div class="card">
+    <div class="play-type-card" role="button" tabindex="0" aria-label="Spar with the bot — no friends around? Spar solo" onclick="startBotGame()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();startBotGame();}">
+      <div class="icon" aria-hidden="true">🤖</div>
+      <h3>Spar with the bot</h3>
+      <p>No friends around? Go a round against JabBot.</p>
+    </div>
+  </div>
+
+  <!-- 5. DAILY JAB -->
   <div class="card daily-card" role="button" tabindex="0" aria-label="Daily Jab — one word, six rounds, today's fight" onclick="openDailyJab()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openDailyJab();}">
     <div class="dc-icon" aria-hidden="true">🥊</div>
     <div class="dc-body">
@@ -552,45 +650,24 @@
     </div>
     <div class="dc-flame" id="daily-card-flame"></div>
   </div>
-  <div class="card">
-    <div class="play-type-card" role="button" tabindex="0" aria-label="Join a game — got a 4-letter code? Jump in" onclick="showScreen('screen-join')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showScreen('screen-join');}" style="margin-bottom:1rem;">
-      <div class="icon" aria-hidden="true">🔑</div>
-      <h3>Join a game</h3>
-      <p>Got a 4-letter code? Jump in.</p>
+
+  <!-- 6. LEADERBOARD -->
+  <div class="card" id="leaderboard-card" style="padding-bottom:0.75rem;">
+    <div class="lb-tabs">
+      <button class="lb-tab active" onclick="switchLbTab('shared')">Leaderboard</button>
+      <button class="lb-tab" onclick="switchLbTab('recent')">Recent games</button>
     </div>
-    <div class="play-type-cards">
-      <div class="play-type-card" role="button" tabindex="0" aria-label="Host online — get a 4-letter code to share" onclick="showScreen('screen-online-setup')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showScreen('screen-online-setup');}">
-        <div class="icon" aria-hidden="true">🌐</div>
-        <h3>Host online</h3>
-        <p>Get a 4-letter code to share.</p>
-      </div>
-      <div class="play-type-card" role="button" tabindex="0" aria-label="Same Device — everyone plays on one screen, pass and play" onclick="chooseLocal()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();chooseLocal();}">
-        <div class="icon" aria-hidden="true">🖥️</div>
-        <h3>Same Device</h3>
-        <p>Everyone plays on one screen. Pass and play.</p>
-      </div>
+    <div id="lb-panel-shared" class="lb-panel active">
+      <div id="lb-shared-content"><div class="lb-empty">Loading...</div></div>
     </div>
-    <div class="play-type-card" role="button" tabindex="0" aria-label="Practice vs the bot — no friends around? Spar solo" onclick="startBotGame()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();startBotGame();}">
-      <div class="icon" aria-hidden="true">🤖</div>
-      <h3>Practice vs the Bot</h3>
-      <p>No friends around? Spar a round against JabBot.</p>
+    <div id="lb-panel-recent" class="lb-panel">
+      <div id="lb-recent-feed"><div class="lb-empty">No games played yet on this device.</div></div>
     </div>
   </div>
-  <div class="card" id="corr-card">
-    <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:0.3rem;">
-      <h2 style="font-family:'Anton',sans-serif;font-size:0.95rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted-2);">📮 Play by Mail</h2>
-      <span id="corr-turn-badge" style="font-size:0.72rem;color:var(--jab-soft);font-weight:600;"></span>
-    </div>
-    <p style="font-size:0.78rem;color:var(--muted);margin-bottom:0.75rem;">Turn-by-turn matches that survive everyone leaving. Make your move, close the app, come back when it's your turn — no staying connected, no getting dropped.</p>
-    <div class="btn-row" style="margin-top:0;">
-      <button class="btn-primary btn-sm" onclick="openCorrNew()" style="flex:1;">✉️ New match</button>
-      <button class="btn-secondary btn-sm" onclick="openCorrJoin()" style="flex:1;">Join by code</button>
-    </div>
-    <div id="corr-list" aria-live="polite" style="margin-top:0.75rem;"></div>
-  </div>
+
   <div class="card" id="lounge-card">
     <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:0.3rem;">
-      <h2 style="font-family:'Anton',sans-serif;font-size:0.95rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted-2);">🥊 The Lounge</h2>
+      <h2 class="home-h" style="margin:0;">🥊 The Lounge</h2>
       <span id="lounge-count-badge" style="font-size:0.72rem;color:var(--jab-soft);font-weight:600;"></span>
     </div>
     <p style="font-size:0.78rem;color:var(--muted);margin-bottom:0.75rem;">Meet other players. Step in, see who's around, and challenge anyone to a live match.</p>
@@ -625,18 +702,6 @@
     </div>
   </div>
 
-  <div class="card" style="padding-bottom:0.75rem;">
-    <div class="lb-tabs">
-      <button class="lb-tab active" onclick="switchLbTab('recent')">Recent games</button>
-      <button class="lb-tab" onclick="switchLbTab('shared')">Global leaderboard</button>
-    </div>
-    <div id="lb-panel-recent" class="lb-panel active">
-      <div id="lb-recent-feed"><div class="lb-empty">No games played yet on this device.</div></div>
-    </div>
-    <div id="lb-panel-shared" class="lb-panel">
-      <div id="lb-shared-content"><div class="lb-empty">Loading...</div></div>
-    </div>
-  </div>
   <div class="donate-strip" id="home-donate-strip" style="display:none;">
     <a id="home-donate-btn" class="donate-btn" href="#" target="_blank" rel="noopener">
       <span class="beer" aria-hidden="true">🍺</span> buy the dev a beer
@@ -659,7 +724,7 @@
     <h2>FAQ</h2>
     <div class="faq-item">
       <h3>Is WordJab free to play?</h3>
-      <p>Yes — completely free. No download, no sign-up, no account. Open wordjab.io in any browser and start playing.</p>
+      <p>Yes — completely free. No download needed, and signing in is optional: open wordjab.io in any browser and start playing. Make a name and password if you want your Daily Jab streak saved across devices.</p>
     </div>
     <div class="faq-item">
       <h3>How do I play with friends online?</h3>
@@ -1004,43 +1069,17 @@
     <div class="tiles" id="daily-result-tiles" style="justify-content:center;margin-bottom:1rem;"></div>
     <div class="streak-row" id="daily-streak-row"></div>
     <div id="daily-streak-post" style="margin-top:1rem;padding-top:0.9rem;border-top:0.5px solid var(--line);">
-      <p id="daily-streak-post-label" style="font-size:0.72rem;color:var(--muted);margin-bottom:0.5rem;">Claim your name &amp; save your streak to the global board</p>
-      <div class="lb-key-row" style="justify-content:center;">
-        <input type="text" id="daily-streak-name" placeholder="your name" maxlength="16" autocomplete="off"
-          onkeydown="if(event.key==='Enter') postDailyStreak()">
-        <button onclick="postDailyStreak()" id="daily-streak-post-btn">Save 🔥</button>
+      <div id="daily-save-status" class="acct-msg" aria-live="polite" style="text-align:center;font-size:0.8rem;"></div>
+      <button id="daily-save-retry" class="btn-secondary btn-sm" style="display:none;margin-top:0.4rem;" onclick="autoSaveDaily()">Retry now</button>
+      <div id="daily-acct" style="display:none;">
+        <p style="font-size:0.78rem;color:var(--muted);margin-bottom:0.5rem;">Sign in or pick a name + password to put this on the global board and keep your streak on every device.</p>
+        <form class="acct-form" onsubmit="accountSubmit('daily-acct');return false;">
+          <input type="text" id="daily-acct-name" placeholder="fight name" maxlength="16" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false">
+          <input type="password" id="daily-acct-pw" placeholder="password (4+ characters)" maxlength="32" autocomplete="current-password">
+          <button type="submit" class="btn-primary btn-sm" id="daily-acct-btn">Save my streak 🔥</button>
+        </form>
+        <div id="daily-acct-msg" class="acct-msg" aria-live="polite"></div>
       </div>
-      <div id="daily-recovery-setup" style="margin-top:0.4rem;display:none;">
-        <input type="text" id="daily-recovery-phrase" placeholder="recovery phrase (optional — so you can log in on another device)" maxlength="32" autocomplete="off" style="width:100%;box-sizing:border-box;">
-      </div>
-      <div style="text-align:center;margin-top:4px;">
-        <a href="#" id="daily-name-change" onclick="unlockNameInput('daily-streak-name');return false;" style="display:none;font-size:0.68rem;color:var(--muted);">not you? change name</a>
-        <a href="#" id="daily-copy-key-link" onclick="copyDeviceKey(this);return false;" style="display:none;font-size:0.68rem;color:var(--muted);margin-left:0.6rem;">copy device key</a>
-        <a href="#" id="daily-set-recovery-link" onclick="toggleSetRecoveryPanel();return false;" style="display:none;font-size:0.68rem;color:var(--muted);margin-left:0.6rem;">set/change recovery phrase</a>
-        <a href="#" onclick="toggleRecoverPanel('daily-recover-panel');return false;" style="font-size:0.68rem;color:var(--muted);margin-left:0.6rem;">used this name elsewhere?</a>
-      </div>
-      <div id="daily-set-recovery-panel" style="display:none;margin-top:0.5rem;">
-        <div class="lb-key-row" style="justify-content:center;">
-          <input type="text" id="daily-set-recovery-input" placeholder="new recovery phrase" maxlength="32" autocomplete="off">
-          <button onclick="setRecoveryPhrase('daily-set-recovery-input','daily-set-recovery-msg')">Set</button>
-        </div>
-        <div id="daily-set-recovery-msg" aria-live="polite" style="font-size:0.72rem;min-height:1rem;margin-top:0.3rem;"></div>
-      </div>
-      <div id="daily-recover-panel" style="display:none;margin-top:0.5rem;">
-        <p style="font-size:0.68rem;color:var(--muted);margin-bottom:0.3rem;">Paste the device key you copied from your other device (or from before this one lost its data) to pick up the same name here.</p>
-        <div class="lb-key-row" style="justify-content:center;">
-          <input type="text" id="daily-recover-input" placeholder="paste device key" autocomplete="off">
-          <button onclick="restoreDeviceKey('daily-recover-input','daily-recover-msg')">Restore</button>
-        </div>
-        <p style="font-size:0.68rem;color:var(--muted);margin:0.5rem 0 0.3rem;">No device key handy? Recover with your name and recovery phrase instead.</p>
-        <div class="lb-key-row" style="justify-content:center;">
-          <input type="text" id="daily-recover-name" placeholder="your name" maxlength="16" autocomplete="off" style="max-width:110px;">
-          <input type="text" id="daily-recover-phrase" placeholder="recovery phrase" maxlength="32" autocomplete="off">
-          <button onclick="recoverWithPhrase('daily-recover-name','daily-recover-phrase','daily-recover-msg')">Recover</button>
-        </div>
-        <div id="daily-recover-msg" aria-live="polite" style="font-size:0.72rem;min-height:1rem;margin-top:0.3rem;"></div>
-      </div>
-      <div id="daily-streak-post-msg" aria-live="polite" style="font-size:0.72rem;color:var(--jab-soft);min-height:1rem;margin-top:0.4rem;"></div>
     </div>
   </div>
   <div class="btn-row">
@@ -3148,7 +3187,7 @@ async function readJsonBin(retries = 2, timeoutMs = 8000) {
     try {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), timeoutMs);
-      const res = await fetch(API_BASE + '/leaderboard', { signal: ctrl.signal });
+      const res = await fetch(API_BASE + '/leaderboard', { signal: ctrl.signal, cache: 'no-store' });
       clearTimeout(t);
       _lastBinStatus = 'read ' + res.status;
       if (res.ok) {
@@ -3338,71 +3377,111 @@ function currentWeekIndex() {
   return Math.floor(localDayNumber() / 7);
 }
 
+// The signed-in player's own entry, straight from their account, laid over
+// the fetched board. The board is eventually consistent (edge caching, and
+// the server's periodic rebuild), but your own row never has to wait on it.
+function withMyEntry(record) {
+  const id = signedInIdentity();
+  const p = accountProfile;
+  if (!id || !p || p.name.toLowerCase() !== id.handle.toLowerCase()) return record;
+  const r = { ...record };
+  const nl = p.name.toLowerCase();
+  const rows = (r.dailyStreaks || []).filter(e => (e.name || '').toLowerCase() !== nl);
+  if (p.best > 0 || p.streak > 0) rows.push({ name: p.name, streak: p.streak, current: p.streak, best: p.best, lastDay: p.lastDay });
+  r.dailyStreaks = rows;
+  if (p.weekWins > 0) {
+    const wkIdx = currentWeekIndex();
+    const wk = (r.weekly && r.weekly.weekIndex === wkIdx) ? r.weekly.entries || [] : [];
+    r.weekly = { weekIndex: wkIdx, entries: wk.filter(e => (e.name || '').toLowerCase() !== nl).concat([{ name: p.name, wins: p.weekWins }]) };
+  }
+  return r;
+}
+const liveOf = e => (e.current != null ? e.current : (e.lastDay != null ? 0 : (e.streak || 0)));
+const bestOf = e => (e.best != null ? e.best : (e.streak || 0));
+
+function rerenderLeaderboardFromCache() {
+  const el = document.getElementById('lb-shared-content');
+  const cached = getCachedLeaderboard();
+  if (el && cached) el.innerHTML = renderLeaderboardHtml(cached.record, false);
+}
+
+function lbSection(icon, title, first) {
+  return '<div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin:' + (first ? '0' : '12px') + ' 0 6px;"><span aria-hidden="true">' + icon + '</span> ' + title + '</div>';
+}
+// Top-5 rows plus, if you're further down, your own row with your rank.
+function lbRankedRows(rows, myName, scoreHtml) {
+  const rl = ['gold','silver','bronze'];
+  const me = myName ? rows.findIndex(e => (e.name || '').toLowerCase() === myName.toLowerCase()) : -1;
+  let html = '';
+  rows.slice(0, 5).forEach((e, i) => {
+    const mine = me === i;
+    html += '<div class="lb-row"' + (mine ? ' style="background:var(--jab-tint);border-radius:6px;"' : '') + '><span class="lb-rank ' + (rl[i] || '') + '">' + (i+1) + '</span>';
+    html += '<span class="lb-name">' + esc(e.name) + (mine ? ' <span style="color:var(--jab);font-size:0.7rem;">(you)</span>' : '') + '</span>';
+    html += '<span class="lb-score">' + scoreHtml(e) + '</span></div>';
+  });
+  if (me >= 5) {
+    html += '<div class="lb-row" style="background:var(--jab-tint);border-radius:6px;margin-top:2px;"><span class="lb-rank">' + (me+1) + '</span>' +
+      '<span class="lb-name">' + esc(rows[me].name) + ' <span style="color:var(--jab);font-size:0.7rem;">(you)</span></span>' +
+      '<span class="lb-score">' + scoreHtml(rows[me]) + '</span></div>';
+  }
+  return { html, rank: me, total: rows.length };
+}
+
 function renderLeaderboardHtml(record, stale) {
-  record = record || {};
+  record = withMyEntry(record || {});
   let html = '';
   if (stale) {
     html += '<div style="font-size:0.68rem;color:var(--muted);text-align:center;margin-bottom:6px;">Showing last saved — ' +
       '<a href="#" onclick="loadSharedLeaderboard();return false;" style="color:var(--jab);">refresh</a></div>';
   }
 
-  const myName = getSavedPlayerName();
+  const id = signedInIdentity();
+  const myName = id ? id.handle : '';
+  const p = accountProfile;
+  if (id && p) {
+    html += '<div class="lb-you"><b>' + esc(p.name) + '</b> · 🔥 ' + esc(p.streak) + ' current · ' + esc(p.best) + ' best · ' + esc(p.weekWins) + '/7 this week</div>';
+  } else if (!id) {
+    html += '<div class="lb-you"><a href="#" onclick="focusSignIn();return false;" style="color:var(--jab-soft);">Sign in</a> and every Daily Jab lands on this board automatically.</div>';
+  }
 
   // ── This week's top solvers (resets every week — fresh competition) ──
   const wk = (record.weekly && record.weekly.weekIndex === currentWeekIndex())
     ? (record.weekly.entries || []).slice().sort((a, b) => (b.wins || 0) - (a.wins || 0))
     : [];
-  const myWk = myName ? wk.findIndex(e => (e.name || '').toLowerCase() === myName.toLowerCase()) : -1;
-  html += '<div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;"><span aria-hidden="true">🗓</span> this week\'s top solvers</div>';
+  html += lbSection('🗓', "this week's top solvers", true);
   if (wk.length === 0) {
     html += '<div class="lb-empty" style="padding:0.5rem 0;">Fresh week — solve today\'s Daily Jab and be the first on the board!</div>';
   } else {
-    const rl = ['gold','silver','bronze'];
-    wk.slice(0, 5).forEach((e, i) => {
-      const mine = myWk === i;
-      html += '<div class="lb-row"' + (mine ? ' style="background:var(--jab-tint);border-radius:6px;"' : '') + '><span class="lb-rank ' + (rl[i] || '') + '">' + (i+1) + '</span>';
-      html += '<span class="lb-name">' + esc(e.name) + (mine ? ' <span style="color:var(--jab);font-size:0.7rem;">(you)</span>' : '') + '</span>';
-      html += '<span class="lb-score">' + esc(e.wins) + '/7</span></div>';
-    });
-    if (myWk >= 5) {
-      html += '<div class="lb-row" style="background:var(--jab-tint);border-radius:6px;margin-top:2px;"><span class="lb-rank">' + (myWk+1) + '</span>' +
-        '<span class="lb-name">' + esc(myName) + ' <span style="color:var(--jab);font-size:0.7rem;">(you)</span></span>' +
-        '<span class="lb-score">' + esc(wk[myWk].wins) + '/7</span></div>';
+    html += lbRankedRows(wk, myName, e => esc(e.wins) + '/7').html;
+  }
+
+  // ── Streaks alive right now ──
+  const live = (record.dailyStreaks || []).filter(e => liveOf(e) > 0).sort((a, b) => liveOf(b) - liveOf(a));
+  html += lbSection('🔥', 'streaks on fire');
+  if (live.length === 0) {
+    html += '<div class="lb-empty" style="padding:0.5rem 0;">No live streaks — win today\'s Daily Jab to start one!</div>';
+  } else {
+    const r = lbRankedRows(live, myName, e => '🔥 ' + esc(liveOf(e)));
+    html += r.html;
+    if (r.rank >= 0) {
+      const pct = Math.max(1, Math.round(((r.rank + 1) / r.total) * 100));
+      html += '<div style="font-size:0.66rem;color:var(--muted);text-align:center;margin-top:3px;">You\'re #' + (r.rank + 1) + ' of ' + r.total + (r.rank >= 5 ? ' · top ' + pct + '%' : ' 🔥') + '</div>';
+      html += '<div style="text-align:center;margin-top:6px;"><button class="btn-secondary btn-sm" style="font-size:0.72rem;" onclick="shareMyRank(this)">Share my rank</button></div>';
     }
   }
 
-  // Top daily streaks — with the viewer's own rank + percentile
-  const streaks = (record.dailyStreaks || []).slice().sort((a, b) => (b.streak || 0) - (a.streak || 0));
-  const myRank = myName ? streaks.findIndex(s => (s.name || '').toLowerCase() === myName.toLowerCase()) : -1;
-  html += '<div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;"><span aria-hidden="true">🔥</span> longest daily streaks</div>';
-  if (streaks.length === 0) {
-    html += '<div class="lb-empty" style="padding:0.5rem 0;">No streaks posted yet — play the Daily Jab and post yours!</div>';
+  // ── All-time best streaks ──
+  const best = (record.dailyStreaks || []).filter(e => bestOf(e) > 0).sort((a, b) => bestOf(b) - bestOf(a));
+  html += lbSection('🏅', 'best streaks ever');
+  if (best.length === 0) {
+    html += '<div class="lb-empty" style="padding:0.5rem 0;">No streaks posted yet.</div>';
   } else {
-    const rankLabels = ['gold','silver','bronze'];
-    streaks.slice(0, 5).forEach((s, i) => {
-      const rl = rankLabels[i] || '';
-      const mine = myRank === i;
-      html += '<div class="lb-row"' + (mine ? ' style="background:var(--jab-tint);border-radius:6px;"' : '') + '><span class="lb-rank ' + rl + '">' + (i+1) + '</span>';
-      html += '<span class="lb-name">' + esc(s.name) + (mine ? ' <span style="color:var(--jab);font-size:0.7rem;">(you)</span>' : '') + '</span>';
-      html += '<span class="lb-score">🔥 ' + esc(s.streak) + '</span></div>';
-    });
-    // If you're on the board but below the top 5, show your standing
-    if (myRank >= 5) {
-      const pct = Math.max(1, Math.round(((myRank + 1) / streaks.length) * 100));
-      html += '<div class="lb-row" style="background:var(--jab-tint);border-radius:6px;margin-top:2px;">' +
-        '<span class="lb-rank">' + (myRank + 1) + '</span>' +
-        '<span class="lb-name">' + esc(myName) + ' <span style="color:var(--jab);font-size:0.7rem;">(you)</span></span>' +
-        '<span class="lb-score">🔥 ' + esc(streaks[myRank].streak) + '</span></div>';
-      html += '<div style="font-size:0.66rem;color:var(--muted);text-align:center;margin-top:3px;">You\'re #' + (myRank + 1) + ' of ' + streaks.length + ' · top ' + pct + '%</div>';
-    } else if (myRank >= 0) {
-      html += '<div style="font-size:0.66rem;color:var(--muted);text-align:center;margin-top:3px;">You\'re #' + (myRank + 1) + ' of ' + streaks.length + ' 🔥</div>';
-    }
-    if (myRank >= 0) html += '<div style="text-align:center;margin-top:6px;"><button class="btn-secondary btn-sm" style="font-size:0.72rem;" onclick="shareMyRank(this)">Share my rank</button></div>';
+    html += lbRankedRows(best, myName, e => '🔥 ' + esc(bestOf(e))).html;
   }
 
   // Top scores
   const topScores = record.topScores || [];
-  html += '<div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin:10px 0 6px;"><span aria-hidden="true">🏆</span> top scores</div>';
+  html += lbSection('🏆', 'top scores');
   if (topScores.length === 0) {
     html += '<div class="lb-empty" style="padding:0.5rem 0;">No scores yet.</div>';
   } else {
@@ -3430,7 +3509,7 @@ function renderLeaderboardHtml(record, stale) {
 
   // Longest games
   const longest = record.longestGames || [];
-  html += '<div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin:10px 0 6px;">⏱ longest games</div>';
+  html += lbSection('⏱', 'longest games');
   if (longest.length === 0) {
     html += '<div class="lb-empty" style="padding:0.5rem 0;">No games yet.</div>';
   } else {
@@ -3655,20 +3734,35 @@ function dailyDayNumber() {
 // Whole days since 2024-01-01 in the PLAYER'S LOCAL time. The daily word and
 // streaks are local-day based, so we send this to the server (which used to
 // count in UTC, breaking streaks for players hours away from UTC).
-function localDayNumber() {
-  const offsetMs = new Date().getTimezoneOffset() * 60000;
-  return Math.floor((Date.now() - offsetMs - Date.UTC(2024, 0, 1)) / 86400000);
+function localDayNumber() { return dayNumberOf(todayStr()); }
+// Local calendar date (YYYY-MM-DD) <-> that day number, both ways.
+function dayNumberOf(ymd) {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return Math.round((Date.UTC(y, m - 1, d) - Date.UTC(2024, 0, 1)) / 86400000);
 }
+function dateOfDayNumber(n) { return dateStr(new Date(2024, 0, 1 + n)); }
 
+// In-memory mirrors: if the browser silently refuses to persist storage
+// (Private Browsing, iOS evicting site data), the current visit still works
+// off these, and the server copy covers everything across visits.
+let _memDaily = null;
+let _memPending = [];
 function getDailyState() {
   try {
     const raw = localStorage.getItem(DAILY_KEY);
     if (raw) return JSON.parse(raw);
   } catch(e) {}
+  if (_memDaily) return { ..._memDaily };
   return { streak: 0, best: 0, lastPlayedDate: null, lastResult: null };
 }
 function saveDailyState(state) {
+  _memDaily = { ...state };
   try { localStorage.setItem(DAILY_KEY, JSON.stringify(state)); } catch(e) {}
+}
+// A streak only counts while the last result was today or yesterday.
+function liveLocalStreak(state) {
+  const t = todayStr();
+  return (state.lastPlayedDate === t || state.lastPlayedDate === dayBeforeStr(t)) ? (state.streak || 0) : 0;
 }
 
 let dailyTiles = [];
@@ -3689,13 +3783,12 @@ function renderDailyHomeBadge() {
   const subEl = document.getElementById('daily-card-sub');
   if (!flameEl || !subEl) return;
   const state = getDailyState();
-  flameEl.textContent = state.streak > 0 ? ('\u{1F525} ' + state.streak) : '';
-  if (!storageWorks()) {
-    subEl.textContent = "This browser isn't saving between visits — your streak will reset each time. Turn off Private Browsing / allow site data for this site.";
-    return;
-  }
+  const live = liveLocalStreak(state);
+  flameEl.textContent = live > 0 ? ('\u{1F525} ' + live) : '';
   if (state.lastPlayedDate === todayStr()) {
     subEl.textContent = state.lastResult === 'win' ? "Cracked today's word. Come back tomorrow." : "Today's jab is done. Come back tomorrow.";
+  } else if (!storageWorks() && !getIdentity()) {
+    subEl.textContent = "This browser isn't saving data between visits — sign in above so your streak is kept for you.";
   } else if (new Date().getDay() === 0) {
     subEl.textContent = '💥 Hard Word Sunday — today’s jab is tougher than usual.';
   } else {
@@ -3703,7 +3796,20 @@ function renderDailyHomeBadge() {
   }
 }
 
-function openDailyJab() {
+let _openingDaily = false;
+async function openDailyJab() {
+  if (_openingDaily) return;
+  // Signed in on a device that hasn't heard from the server today (fresh
+  // install, wiped storage, the home-screen app vs Safari): ask first, so
+  // today's result and streak come from the account, not from a blank slate.
+  if (signedInIdentity() && hasBackend() && !(accountProfile && accountProfile.today === localDayNumber())) {
+    _openingDaily = true;
+    const subEl = document.getElementById('daily-card-sub');
+    if (subEl) subEl.textContent = 'Checking your streak…';
+    await Promise.race([syncAccount(), new Promise(r => setTimeout(r, 3000))]);
+    _openingDaily = false;
+    renderDailyHomeBadge();
+  }
   const state = getDailyState();
   const today = todayStr();
   if (state.lastPlayedDate === today) {
@@ -3814,7 +3920,17 @@ function finishDaily(won) {
   state.lastResult = won ? 'win' : 'lose';
   state.lastRoundsLeft = dailyRoundsLeft;
   saveDailyState(state);
+  // Queued before anything else, so the result survives a failed upload, a
+  // closed tab, or playing signed out — it's sent the moment it can be.
+  queueDailyResult({ day: dayNumberOf(today), won, roundsLeft: dailyRoundsLeft });
   showDailyResultScreen(won, dailyTiles.map(t => t.char).join(''), dailyRoundsLeft, state);
+  autoSaveDaily();
+}
+
+function renderDailyStreakRow(state) {
+  document.getElementById('daily-streak-row').innerHTML =
+    '<div class="streak-box"><div class="num">' + esc(liveLocalStreak(state)) + '</div><div class="lbl">current streak</div></div>' +
+    '<div class="streak-box"><div class="num">' + esc(state.best || 0) + '</div><div class="lbl">best streak</div></div>';
 }
 
 function showDailyResultScreen(won, word, roundsLeft, state) {
@@ -3837,148 +3953,84 @@ function showDailyResultScreen(won, word, roundsLeft, state) {
     tilesEl.appendChild(el);
   });
 
-  document.getElementById('daily-streak-row').innerHTML =
-    '<div class="streak-box"><div class="num">' + state.streak + '</div><div class="lbl">current streak</div></div>' +
-    '<div class="streak-box"><div class="num">' + state.best + '</div><div class="lbl">best streak</div></div>';
-
-  // Streak-post row: shown once you've played today; prefill your claimed name
-  const postWrap = document.getElementById('daily-streak-post');
-  if (postWrap) {
-    const playedToday = state.lastPlayedDate === todayStr();
-    postWrap.style.display = (hasBackend() && playedToday && (state.best || 0) > 0) ? 'block' : 'none';
-    applyClaimedName('daily-streak-name', 'daily-name-change');
-    const claimed = getSavedPlayerName();
-    const lbl = document.getElementById('daily-streak-post-label');
-    if (lbl) lbl.textContent = claimed
-      ? 'Save your streak to the global board'
-      : 'Claim your name & save your streak to the global board';
-    document.getElementById('daily-streak-post-msg').textContent = '';
-    document.getElementById('daily-streak-post-btn').disabled = false;
-    document.getElementById('daily-streak-post-btn').textContent = 'Save 🔥';
-    const copyLink = document.getElementById('daily-copy-key-link');
-    if (copyLink) copyLink.style.display = claimed ? 'inline' : 'none';
-    const recoverPanel = document.getElementById('daily-recover-panel');
-    if (recoverPanel) recoverPanel.style.display = 'none';
-    const recoverMsg = document.getElementById('daily-recover-msg');
-    if (recoverMsg) recoverMsg.textContent = '';
-    // Recovery phrase is offered up front while claiming (so it's set before
-    // it's ever needed); once claimed, offer to set/change it instead.
-    const recoverySetup = document.getElementById('daily-recovery-setup');
-    if (recoverySetup) recoverySetup.style.display = claimed ? 'none' : 'block';
-    const setRecoveryLink = document.getElementById('daily-set-recovery-link');
-    if (setRecoveryLink) setRecoveryLink.style.display = claimed ? 'inline' : 'none';
-    const setRecoveryPanel = document.getElementById('daily-set-recovery-panel');
-    if (setRecoveryPanel) setRecoveryPanel.style.display = 'none';
-    const setRecoveryMsg = document.getElementById('daily-set-recovery-msg');
-    if (setRecoveryMsg) setRecoveryMsg.textContent = '';
-  }
-
-  lastDailyShare = { won, word, roundsLeft, streak: state.streak };
+  renderDailyStreakRow(state);
+  lastDailyShare = { won, word, roundsLeft, streak: liveLocalStreak(state) };
+  renderDailySaveStatus();
 }
 
-// Reuse the lounge fight-name if the player has one, else any name they've posted before
-function getSavedPlayerName() {
-  try {
-    const id = JSON.parse(localStorage.getItem(IDENTITY_KEY) || 'null');
-    if (id && id.handle) return id.handle;
-    return localStorage.getItem('wj_player_name') || '';
-  } catch(e) { return ''; }
+// The save line under the result: signed in -> it just happens (status only);
+// signed out -> the name + password form, which saves on submit.
+function setDailySave(kind, text) {
+  const status = document.getElementById('daily-save-status');
+  const retry = document.getElementById('daily-save-retry');
+  if (!status) return;
+  status.className = 'acct-msg' + (kind === 'ok' ? ' ok' : kind === 'err' ? ' err' : '');
+  status.textContent = text || '';
+  if (retry) retry.style.display = kind === 'err' ? 'inline-block' : 'none';
 }
-
-async function postDailyStreak() {
-  const msg = document.getElementById('daily-streak-post-msg');
-  const btn = document.getElementById('daily-streak-post-btn');
-  const input = document.getElementById('daily-streak-name');
-  const name = (input.value || '').trim();
-  const err = handleError(name);
-  if (err) { msg.style.color = 'var(--hit-soft)'; msg.textContent = err; return; }
-  const state = getDailyState();
-  if (state.lastPlayedDate !== todayStr()) {
-    msg.style.color = 'var(--hit-soft)'; msg.textContent = "Play today's Daily Jab first."; return;
-  }
-  if (!storageWorks()) {
-    msg.style.color = 'var(--hit-soft)';
-    msg.textContent = "This browser isn't saving data between visits, so a streak name can't be claimed here. Turn off Private Browsing or allow site data/cookies for this site, then reload and try again.";
+function renderDailySaveStatus() {
+  const post = document.getElementById('daily-streak-post');
+  const acct = document.getElementById('daily-acct');
+  if (!post || !acct) return;
+  post.style.display = hasBackend() ? 'block' : 'none';
+  const id = signedInIdentity();
+  if (!id) {
+    acct.style.display = 'block';
+    const nameEl = document.getElementById('daily-acct-name');
+    if (nameEl && !nameEl.value) nameEl.value = getSavedPlayerName();
+    setDailySave('', '');
     return;
   }
-  // Only relevant on a brand-new claim — offered up front so it's set
-  // before it's ever needed, rather than after the device that could set it
-  // is already gone.
-  let recovery = '';
-  if (!getSavedPlayerName()) {
-    const recInput = document.getElementById('daily-recovery-phrase');
-    recovery = (recInput && recInput.value || '').trim();
-    if (recovery && recovery.length < 4) {
-      msg.style.color = 'var(--hit-soft)'; msg.textContent = 'Recovery phrase must be at least 4 characters (or leave it blank).'; return;
-    }
-  }
-  const won = state.lastResult === 'win';
-  btn.disabled = true; btn.textContent = 'Saving…';
-  msg.style.color = 'var(--muted)'; msg.textContent = 'Saving to the global board…';
-  // Hard cap the whole operation so the button can never look stuck
-  const timeout = new Promise(res => setTimeout(() => res({ ok: false, timeout: true }), 14000));
-  let r;
-  try { r = await Promise.race([submitDaily(name, won, recovery), timeout]); } catch(e) { r = { ok: false }; }
-  if (r && r.ok) {
-    saveIdentity(name); // remember the claimed name (shared with the lounge)
-    // Reconcile local storage with what the server actually has on file for
-    // this name. This device's own copy is normally authoritative, but a
-    // successful save is a rare confirmed checkpoint — use it to heal
-    // forward (never backward) if this device's storage ever undercounts.
-    const cur = getDailyState();
-    cur.best = Math.max(cur.best || 0, r.best || 0);
-    cur.streak = Math.max(cur.streak || 0, r.streak || 0);
-    saveDailyState(cur);
-    applyClaimedName('daily-streak-name', 'daily-name-change');
-    const recInput = document.getElementById('daily-recovery-phrase');
-    if (recInput) recInput.value = '';
-    const recoverySetup = document.getElementById('daily-recovery-setup');
-    if (recoverySetup) recoverySetup.style.display = 'none';
-    const setRecoveryLink = document.getElementById('daily-set-recovery-link');
-    if (setRecoveryLink) setRecoveryLink.style.display = 'inline';
-    msg.style.color = 'var(--jab-soft)';
-    msg.textContent = r.already
-      ? ("Already saved today — 🔥 " + r.best + " best.")
-      : ('Saved! ' + name + ' — 🔥 ' + r.best + ' best' + (r.streak ? (', ' + r.streak + ' current') : '') + '.');
-    btn.textContent = 'Saved ✓';
-    loadSharedLeaderboard(); // reflect it on the board right away
-  } else if (r && r.taken) {
-    msg.style.color = 'var(--hit-soft)';
-    msg.textContent = 'That name is already yours on another device? Enter your recovery phrase below to pick it back up here — or use a different name.';
-    btn.disabled = false; btn.textContent = 'Save 🔥';
-    // Surface the recovery form immediately instead of leaving her to find
-    // the "used this name elsewhere?" link on her own — this IS the moment
-    // it's needed.
-    const recoverPanel = document.getElementById('daily-recover-panel');
-    if (recoverPanel) recoverPanel.style.display = 'block';
-    const recoverName = document.getElementById('daily-recover-name');
-    if (recoverName) recoverName.value = name;
-    const recoverPhrase = document.getElementById('daily-recover-phrase');
-    if (recoverPhrase) recoverPhrase.focus();
-  } else {
-    msg.style.color = 'var(--hit-soft)';
-    const detail = _lastBinStatus ? ' [' + _lastBinStatus + ']' : '';
-    msg.textContent = "Couldn't reach the leaderboard — try again." + detail;
-    btn.disabled = false; btn.textContent = 'Save 🔥';
-  }
+  acct.style.display = 'none';
+  if (getPendingDaily().length) { setDailySave('', 'Saving your streak to ' + id.handle + '…'); return; }
+  const p = accountProfile;
+  setDailySave('ok', p
+    ? ('✓ Saved to ' + p.name + ' · 🔥 ' + p.streak + ' current · ' + p.best + ' best')
+    : ('✓ Saved to ' + id.handle));
 }
 
-// Claim/verify the name (proves ownership via the browser secret), then record
-// today's result. The server computes the streak — the client never sends a number.
-async function submitDaily(name, won, recovery) {
-  if (!hasBackend()) return { ok: false };
-  const secret = mySecret();
-  // recovery is only meaningful on a brand-new claim — the server ignores it
-  // once the name already belongs to this secret.
-  const reg = await apiPostJson('/register', recovery ? { name, secret, recovery } : { name, secret });
-  if (!reg) return { ok: false };
-  if (reg.status === 409) return { ok: false, taken: true };
-  if (!reg.ok) return { ok: false };
-  // The server computes streak/best itself from this identity's own day
-  // history — it no longer trusts a client-supplied number.
-  const d = await apiPostJson('/daily', { name, secret, won, day: localDayNumber() });
-  if (!d || !d.ok) return { ok: false };
-  return { ok: true, streak: d.data.streak || 0, best: d.data.best || 0, already: !!d.data.already };
+let _autoSaveTimer = null, _autoSaveTries = 0;
+async function autoSaveDaily() {
+  clearTimeout(_autoSaveTimer);
+  const id = signedInIdentity();
+  if (!id || !hasBackend()) { renderDailySaveStatus(); return; }
+  if (getPendingDaily().length) setDailySave('', 'Saving your streak to ' + id.handle + '…');
+  const res = await flushPendingDaily();
+  if (res === 'net') {
+    _autoSaveTries++;
+    setDailySave('err', "Kept on this device — couldn't reach the server yet. Retrying automatically.");
+    _autoSaveTimer = setTimeout(autoSaveDaily, Math.min(120000, 5000 * Math.pow(2, _autoSaveTries - 1)));
+    renderAccountCard();
+    return;
+  }
+  _autoSaveTries = 0;
+  if (res === 'auth') {
+    accountAuthLost = true;
+    renderAccountCard();
+    renderDailySaveStatus();
+    setDailyAcctMsg('This device got signed out of ' + id.handle + ' — sign in again and your result is saved.', 'err');
+    return;
+  }
+  if (document.getElementById('screen-daily-result').classList.contains('active')) {
+    const state = getDailyState();
+    renderDailyStreakRow(state);
+    if (lastDailyShare) lastDailyShare.streak = liveLocalStreak(state);
+  }
+  renderDailySaveStatus();
+  renderAccountCard();
+  renderDailyHomeBadge();
+  if (res === 'ok') loadSharedLeaderboard(); // reflect it on the board right away
+}
+function setDailyAcctMsg(text, kind) {
+  const m = document.getElementById('daily-acct-msg');
+  if (m) { m.className = 'acct-msg' + (kind ? ' ' + kind : ''); m.textContent = text; }
+}
+
+// The account name if signed in, else any name this browser has used before
+function getSavedPlayerName() {
+  const id = getIdentity();
+  if (id && id.handle) return id.handle;
+  try { return localStorage.getItem('wj_player_name') || ''; } catch(e) { return ''; }
 }
 
 let lastDailyShare = null;
@@ -4020,13 +4072,13 @@ function copyToClipboard(text, btn, okLabel) {
 
 function shareMyRank(btn) {
   const cached = getCachedLeaderboard();
-  const streaks = ((cached && cached.record && cached.record.dailyStreaks) || [])
-    .slice().sort((a, b) => (b.streak || 0) - (a.streak || 0));
+  const record = withMyEntry((cached && cached.record) || {});
+  const live = (record.dailyStreaks || []).filter(e => liveOf(e) > 0).sort((a, b) => liveOf(b) - liveOf(a));
   const myName = getSavedPlayerName();
-  const rank = myName ? streaks.findIndex(s => (s.name || '').toLowerCase() === myName.toLowerCase()) : -1;
-  if (rank < 0) { if (btn) { const o = btn.textContent; btn.textContent = 'Post a streak first'; setTimeout(() => btn.textContent = o, 1500); } return; }
+  const rank = myName ? live.findIndex(s => (s.name || '').toLowerCase() === myName.toLowerCase()) : -1;
+  if (rank < 0) { if (btn) { const o = btn.textContent; btn.textContent = 'Win a Daily Jab first'; setTimeout(() => btn.textContent = o, 1500); } return; }
   const text = 'WordJab 🥊 Daily Streak board\n' +
-    "I'm #" + (rank + 1) + ' of ' + streaks.length + ' — 🔥 ' + streaks[rank].streak + ' streak!\n' +
+    "I'm #" + (rank + 1) + ' of ' + live.length + ' — 🔥 ' + liveOf(live[rank]) + ' streak!\n' +
     'wordjab.io';
   copyToClipboard(text, btn, 'Copied!');
 }
@@ -4060,142 +4112,332 @@ function genSecret() {
     return (Math.random().toString(36) + Math.random().toString(36)).replace(/\./g, '').slice(0, 32);
   }
 }
+let _memIdentity = null;
 function getIdentity() {
   try {
     const id = JSON.parse(localStorage.getItem(IDENTITY_KEY) || 'null');
     if (id && id.uid && id.handle) {
-      if (!id.secret) { id.secret = genSecret(); localStorage.setItem(IDENTITY_KEY, JSON.stringify(id)); }
+      if (!id.secret) {
+        id.secret = localStorage.getItem('wj_secret') || genSecret();
+        localStorage.setItem(IDENTITY_KEY, JSON.stringify(id));
+      }
       return id;
     }
   } catch(e) {}
-  return null;
+  return _memIdentity;
 }
 function saveIdentity(handle) {
   const existing = getIdentity();
   const uid = existing ? existing.uid : 'u' + Math.random().toString(36).slice(2, 12);
   const id = { uid, handle, secret: mySecret() };
+  _memIdentity = id;
+  _cachedSecret = id.secret;
   try { localStorage.setItem(IDENTITY_KEY, JSON.stringify(id)); } catch(e) {}
+  try { localStorage.setItem('wj_secret', id.secret); } catch(e) {}
   return id;
 }
 
-// A claimed name is permanently bound to whatever secret first registered
-// it — the server has no other way to prove ownership, and there's no login
-// to recover it through. That's fine on one device, but it means a second
-// device (or a wiped browser) can never re-claim the same name on its own:
-// /register will 409 "taken" forever, even though it's genuinely the same
-// person. The only way around that without server-side auth is to let the
-// person carry their own secret between devices themselves.
-function deviceKeyString() {
-  const handle = getSavedPlayerName();
-  const secret = mySecret();
-  if (!handle || !secret) return '';
-  try { return btoa(JSON.stringify({ h: handle, s: secret })); } catch(e) { return ''; }
-}
-function copyDeviceKey(btn) {
-  const key = deviceKeyString();
-  if (!key) return;
-  copyToClipboard(key, btn, 'Copied!');
-}
 function toggleRecoverPanel(panelId) {
   const el = document.getElementById(panelId);
   if (!el) return;
   el.style.display = (el.style.display === 'none' || !el.style.display) ? 'block' : 'none';
 }
-// Overwrite this device's identity with one exported from another device (or
-// saved before this one lost its data), so it presents the same secret the
-// server already has on file for that name.
+// Names claimed before passwords existed can only be proven by the original
+// device's secret. A device key (exported by older builds) carries it over.
 function restoreDeviceKey(inputId, msgId) {
   const input = document.getElementById(inputId);
-  const msg = document.getElementById(msgId);
   const raw = (input && input.value || '').trim();
   let parsed = null;
   try { parsed = JSON.parse(atob(raw)); } catch(e) {}
   if (!parsed || !parsed.h || !parsed.s) {
-    if (msg) { msg.style.color = 'var(--hit-soft)'; msg.textContent = "That device key doesn't look right — paste it exactly as copied."; }
+    setMsg(msgId, "That device key doesn't look right — paste it exactly as copied.", 'err');
     return;
   }
-  const existing = getIdentity();
-  const uid = existing ? existing.uid : 'u' + Math.random().toString(36).slice(2, 12);
-  const id = { uid, handle: parsed.h, secret: parsed.s };
-  try { localStorage.setItem(IDENTITY_KEY, JSON.stringify(id)); } catch(e) {}
-  try { localStorage.setItem('wj_secret', parsed.s); } catch(e) {}
   _cachedSecret = parsed.s;
-  if (msg) { msg.style.color = 'var(--jab-soft)'; msg.textContent = 'Restored ' + parsed.h + ' on this device.'; }
+  try { localStorage.setItem('wj_secret', parsed.s); } catch(e) {}
+  const existing = getIdentity();
+  const id = { uid: existing ? existing.uid : 'u' + Math.random().toString(36).slice(2, 12), handle: parsed.h, secret: parsed.s };
+  _memIdentity = id;
+  try { localStorage.setItem(IDENTITY_KEY, JSON.stringify(id)); } catch(e) {}
+  setMsg(msgId, 'Restored ' + parsed.h + ' on this device — now set a password so you never need a key again.', 'ok');
   if (input) input.value = '';
-  applyClaimedName('daily-streak-name', 'daily-name-change');
-  renderDailyHomeBadge();
+  accountAuthLost = false;
+  afterSignIn();
 }
 
-function toggleSetRecoveryPanel() {
-  const el = document.getElementById('daily-set-recovery-panel');
-  if (!el) return;
-  el.style.display = (el.style.display === 'none' || !el.style.display) ? 'block' : 'none';
-}
-// Set/replace the recovery phrase for the name already claimed on this
-// device. Proven by the device's own secret — same authority as any other
-// write to this identity.
+// Set or change the password for the signed-in name.
 async function setRecoveryPhrase(inputId, msgId) {
   const input = document.getElementById(inputId);
-  const msg = document.getElementById(msgId);
   const phrase = (input && input.value || '').trim();
-  const name = getSavedPlayerName();
-  if (!name) return;
-  if (phrase.length < 4) {
-    if (msg) { msg.style.color = 'var(--hit-soft)'; msg.textContent = 'Recovery phrase must be at least 4 characters.'; }
-    return;
-  }
-  if (msg) { msg.style.color = 'var(--muted)'; msg.textContent = 'Saving…'; }
-  const r = await apiPostJson('/recovery-set', { name, secret: mySecret(), recovery: phrase });
+  const id = signedInIdentity();
+  if (!id) return;
+  if (phrase.length < 4) { setMsg(msgId, 'Passwords are at least 4 characters.', 'err'); return; }
+  setMsg(msgId, 'Saving…', '');
+  const r = await apiPostJson('/recovery-set', { name: id.handle, secret: id.secret, password: phrase });
   if (r && r.ok) {
-    if (msg) { msg.style.color = 'var(--jab-soft)'; msg.textContent = 'Recovery phrase set.'; }
     if (input) input.value = '';
+    if (accountProfile) accountProfile.hasPassword = true;
+    renderAccountCard();
+    document.getElementById('acct-setpw').style.display = 'none';
+    setAccountStatus('Password saved ✓ — use it to sign in on any device.', 'ok');
   } else {
-    if (msg) { msg.style.color = 'var(--hit-soft)'; msg.textContent = "Couldn't save that — try again."; }
+    setMsg(msgId, "Couldn't save that — try again.", 'err');
   }
 }
-// Recover a name on a NEW device using the recovery phrase set on the
-// original device, instead of needing that device's exported key. The
-// server verifies the phrase and reassigns the name to this device's secret.
-async function recoverWithPhrase(nameInputId, phraseInputId, msgId) {
-  const nameInput = document.getElementById(nameInputId);
-  const phraseInput = document.getElementById(phraseInputId);
-  const msg = document.getElementById(msgId);
-  const name = (nameInput && nameInput.value || '').trim();
-  const phrase = (phraseInput && phraseInput.value || '').trim();
-  if (!name || !phrase) {
-    if (msg) { msg.style.color = 'var(--hit-soft)'; msg.textContent = 'Enter both your name and recovery phrase.'; }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── Account: name + password, streak kept on the server ─────────────────────
+// The server's record for a name is the source of truth for its streak. This
+// device only keeps (a) which name it's signed in as, plus a per-device secret
+// the server knows, and (b) a queue of Daily Jab results not yet uploaded.
+// If storage is wiped (iOS does this; the home-screen app also has storage
+// separate from Safari's), signing in again brings everything back.
+const PENDING_KEY = 'wj_daily_pending';
+let accountProfile = null;   // last profile the server returned (/me, /daily, /register)
+let accountAuthLost = false; // server stopped recognising this device's secret
+let _syncing = null, _lastSync = 0, _flushing = null;
+
+function setMsg(id, text, kind) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.className = 'acct-msg' + (kind ? ' ' + kind : '');
+  el.textContent = text || '';
+}
+function setAccountStatus(text, kind) { setMsg('acct-status', text, kind); }
+
+function signedInIdentity() { return accountAuthLost ? null : getIdentity(); }
+
+function getPendingDaily() {
+  try {
+    const raw = localStorage.getItem(PENDING_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  return _memPending.slice();
+}
+function setPendingDaily(list) {
+  _memPending = list.slice();
+  try {
+    if (list.length) localStorage.setItem(PENDING_KEY, JSON.stringify(list));
+    else localStorage.removeItem(PENDING_KEY);
+  } catch(e) {}
+}
+function queueDailyResult(r) {
+  const list = getPendingDaily().filter(x => x.day !== r.day);
+  list.push(r);
+  setPendingDaily(list.slice(-5));
+}
+
+// Uploads queued results, oldest first. 'ok' | 'none' | 'net' | 'auth'.
+function flushPendingDaily() {
+  if (_flushing) return _flushing;
+  _flushing = (async () => {
+    const id = signedInIdentity();
+    if (!id || !hasBackend()) return 'none';
+    // The server only accepts yesterday or today; anything older can't count.
+    let list = getPendingDaily().filter(p => p.day >= localDayNumber() - 1).sort((a, b) => a.day - b.day);
+    setPendingDaily(list);
+    if (!list.length) return 'none';
+    for (const p of list.slice()) {
+      const d = await apiPostJson('/daily', { name: id.handle, secret: id.secret, won: !!p.won, roundsLeft: p.roundsLeft, day: p.day });
+      if (!d || d.status >= 500) return 'net';
+      if (d.status === 403 || d.status === 404) return 'auth';
+      // Recorded, already recorded, or too old to count: settled either way.
+      list = list.filter(x => x.day !== p.day);
+      setPendingDaily(list);
+      if (d.ok && d.data.profile) applyServerProfile(d.data.profile);
+    }
+    return 'ok';
+  })().finally(() => { _flushing = null; });
+  return _flushing;
+}
+
+// Server wins: overwrite this device's streak with the account's.
+function applyServerProfile(p) {
+  if (!p) return;
+  accountProfile = p;
+  // A result still waiting to upload is newer than what the server has; keep
+  // showing it until it lands (the upload's reply re-applies the server's view).
+  if (getPendingDaily().some(x => x.day > (p.lastDay || 0))) return;
+  const state = getDailyState();
+  state.streak = p.streak || 0;
+  state.best = p.best || 0;
+  state.lastPlayedDate = p.lastDay ? dateOfDayNumber(p.lastDay) : null;
+  state.lastResult = p.lastResult || null;
+  if (p.lastRoundsLeft != null) state.lastRoundsLeft = p.lastRoundsLeft;
+  saveDailyState(state);
+}
+
+// Pull the account's state (after pushing anything queued). Runs on load and
+// whenever the app comes back to the foreground.
+function syncAccount() {
+  if (_syncing) return _syncing;
+  _syncing = (async () => {
+    const id = getIdentity();
+    if (!id || !hasBackend()) return;
+    await flushPendingDaily();
+    const r = await apiPostJson('/me', { name: id.handle, secret: id.secret, day: localDayNumber() }, 8000);
+    if (r && r.ok && r.data.profile) {
+      accountAuthLost = false;
+      _lastSync = Date.now();
+      applyServerProfile(r.data.profile);
+      if (getPendingDaily().length) await flushPendingDaily();
+    } else if (r && (r.status === 403 || (r.status === 404 && r.data.error === 'unknown name'))) {
+      // (A bare 404 means a Worker without /me — not a signed-out device.)
+      accountAuthLost = true;
+    }
+  })().catch(() => {}).finally(() => {
+    _syncing = null;
+    renderAccountCard();
+    renderDailyHomeBadge();
+  });
+  return _syncing;
+}
+
+// This device's pre-sign-in streak, offered once when claiming a NEW name so
+// making an account never resets anyone to zero. (Ignored for existing names.)
+function localCarry() {
+  const st = getDailyState();
+  if (!st.lastPlayedDate) return null;
+  const d = dayNumberOf(st.lastPlayedDate);
+  if (d < localDayNumber() - 1) return null;
+  return { streak: st.streak || 0, best: st.best || 0, lastDay: d, won: st.lastResult === 'win', roundsLeft: st.lastRoundsLeft || 0 };
+}
+
+// One form for both "create" and "sign in" — the server decides which.
+async function accountSubmit(prefix) {
+  const nameEl = document.getElementById(prefix + '-name');
+  const pwEl = document.getElementById(prefix + '-pw');
+  const btn = document.getElementById(prefix + '-btn');
+  const msgId = prefix + '-msg';
+  const name = (nameEl.value || '').trim();
+  const pw = (pwEl.value || '').trim();
+  const err = handleError(name);
+  if (err) { setMsg(msgId, err, 'err'); return; }
+  if (pw.length < 4) { setMsg(msgId, 'Passwords are at least 4 characters.', 'err'); pwEl.focus(); return; }
+  if (!hasBackend()) return;
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  setMsg(msgId, '', '');
+  // Signing in to a different name than this device last used starts fresh.
+  const prev = getIdentity();
+  if (prev && prev.handle.toLowerCase() !== name.toLowerCase()) {
+    _cachedSecret = null; _memIdentity = null;
+    try { localStorage.removeItem(IDENTITY_KEY); localStorage.removeItem('wj_secret'); } catch(e) {}
+  }
+  const secret = mySecret();
+  const body = { name, secret, password: pw, day: localDayNumber() };
+  const carry = localCarry();
+  if (carry) body.carry = carry;
+  const r = await apiPostJson('/register', body, 12000);
+  btn.disabled = false; btn.textContent = label;
+  if (!r) { setMsg(msgId, "Couldn't reach the server — check your connection and try again.", 'err'); return; }
+  if (!r.ok) {
+    if (r.status === 409 && r.data.hasPassword === false) {
+      setMsg(msgId, '"' + name + '" was claimed before passwords existed. Open WordJab where you claimed it and set a password there — or pick another name.', 'err');
+    } else {
+      setMsg(msgId, r.data.error || 'Sign-in failed — try again.', 'err');
+    }
     return;
   }
-  if (msg) { msg.style.color = 'var(--muted)'; msg.textContent = 'Recovering…'; }
-  const secret = mySecret();
-  const r = await apiPostJson('/recover', { name, recovery: phrase, newSecret: secret });
-  if (r && r.ok) {
-    const existing = getIdentity();
-    const uid = existing ? existing.uid : 'u' + Math.random().toString(36).slice(2, 12);
-    const id = { uid, handle: r.data.name || name, secret };
-    try { localStorage.setItem(IDENTITY_KEY, JSON.stringify(id)); } catch(e) {}
-    _cachedSecret = secret;
-    const cur = getDailyState();
-    cur.best = Math.max(cur.best || 0, r.data.best || 0);
-    cur.streak = Math.max(cur.streak || 0, r.data.streak || 0);
-    saveDailyState(cur);
-    if (msg) { msg.style.color = 'var(--jab-soft)'; msg.textContent = 'Recovered ' + (r.data.name || name) + ' — saving today’s result…'; }
-    if (nameInput) nameInput.value = '';
-    if (phraseInput) phraseInput.value = '';
-    applyClaimedName('daily-streak-name', 'daily-name-change');
-    renderDailyHomeBadge();
-    const recoverPanel = document.getElementById('daily-recover-panel');
-    if (recoverPanel) recoverPanel.style.display = 'none';
-    // She was mid-Save when this got triggered — finish the job instead of
-    // making her notice and click Save again.
-    if (document.getElementById('screen-daily-result').classList.contains('active')) {
-      postDailyStreak();
-    }
-  } else {
-    const errMsg = (r && r.data && r.data.error) || "Couldn't recover that name — check the phrase and try again.";
-    if (msg) { msg.style.color = 'var(--hit-soft)'; msg.textContent = errMsg; }
-  }
+  pwEl.value = '';
+  saveIdentity(r.data.name || name);
+  accountAuthLost = false;
+  if (r.data.profile) applyServerProfile(r.data.profile);
+  setMsg(msgId, r.data.existing ? 'Signed in ✓' : 'Name claimed — you’re signed in ✓', 'ok');
+  afterSignIn();
 }
+
+function afterSignIn() {
+  renderAccountCard();
+  renderDailyHomeBadge();
+  applyClaimedName('lounge-handle', 'lounge-name-change');
+  renderFriends();
+  refreshCorrList();
+  // Uploads anything played while signed out, then refreshes status + board.
+  autoSaveDaily().then(() => syncAccount()).then(() => {
+    if (document.getElementById('screen-daily-result').classList.contains('active')) {
+      const st = getDailyState();
+      renderDailyStreakRow(st);
+      renderDailySaveStatus();
+    }
+    loadSharedLeaderboard();
+  });
+}
+
+function signOut() {
+  const id = getIdentity();
+  if (!id) return;
+  const noPw = accountProfile && !accountProfile.hasPassword;
+  const q = noPw
+    ? 'You haven’t set a password, so nobody — including you — could sign back in to "' + id.handle + '". Sign out anyway?'
+    : 'Sign out of ' + id.handle + '? Your streak stays saved on your account — sign back in any time.';
+  if (!confirm(q)) return;
+  if (inLounge) leaveLounge();
+  try { [IDENTITY_KEY, 'wj_secret', DAILY_KEY, PENDING_KEY, 'wj_player_name'].forEach(k => localStorage.removeItem(k)); } catch(e) {}
+  _memIdentity = null; _cachedSecret = null; _memDaily = null; _memPending = [];
+  accountProfile = null; accountAuthLost = false;
+  renderAccountCard();
+  renderDailyHomeBadge();
+  applyClaimedName('lounge-handle', 'lounge-name-change');
+  refreshCorrList();
+  renderFriends();
+  rerenderLeaderboardFromCache();
+}
+
+function renderAccountCard() {
+  const out = document.getElementById('account-out');
+  const inn = document.getElementById('account-in');
+  if (!out || !inn) return;
+  const id = getIdentity();
+  const signedIn = !!signedInIdentity();
+  out.style.display = signedIn ? 'none' : 'block';
+  inn.style.display = signedIn ? 'block' : 'none';
+  if (!signedIn) {
+    const nameEl = document.getElementById('acct-name');
+    if (nameEl && !nameEl.value && id) nameEl.value = id.handle;
+    if (accountAuthLost && id) setMsg('acct-msg', 'Sign in again to keep saving your streak to ' + id.handle + '.', 'err');
+    return;
+  }
+  document.getElementById('acct-you').textContent = id.handle;
+  const p = accountProfile;
+  const live = p ? p.streak : liveLocalStreak(getDailyState());
+  const best = p ? p.best : (getDailyState().best || 0);
+  document.getElementById('acct-streak').textContent = '🔥 ' + live + (best ? ' · best ' + best : '');
+  const pending = getPendingDaily().length;
+  const status = document.getElementById('acct-status');
+  if (pending) setAccountStatus(pending + ' Daily Jab result' + (pending === 1 ? '' : 's') + ' waiting to upload — retrying automatically.', 'err');
+  else if (!p && hasBackend()) setAccountStatus('Syncing your streak…', '');
+  else if (status && !status.classList.contains('ok')) setAccountStatus('', '');
+  const needsPw = !!(p && !p.hasPassword);
+  const setpw = document.getElementById('acct-setpw');
+  const label = document.getElementById('acct-setpw-label');
+  if (label) label.style.display = needsPw ? 'block' : 'none';
+  if (needsPw) setpw.style.display = 'block';
+  const changeWrap = document.getElementById('acct-changepw-wrap');
+  if (changeWrap) changeWrap.style.display = (p && p.hasPassword) ? 'block' : 'none';
+}
+
+function focusSignIn() {
+  showScreen('screen-home');
+  const card = document.getElementById('account-card');
+  if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  setTimeout(() => { const n = document.getElementById('acct-name'); if (n) n.focus(); }, 300);
+}
+
+// Coming back to the app (iOS resumes home-screen apps and restores pages
+// from its back/forward cache WITHOUT reloading) — re-check the day and pull
+// the account, or a stale screen from yesterday sticks around.
+function onAppResume() {
+  renderDailyHomeBadge();
+  if (Date.now() - _lastSync < 20000) return;
+  syncAccount().then(() => {
+    if (document.getElementById('screen-home').classList.contains('active')) {
+      loadSharedLeaderboard();
+      refreshCorrList();
+    }
+  });
+}
+
 // Keep the player's claimed name consistent: once claimed, name inputs are
 // prefilled and read-only (no accidental typo-renames) with a deliberate
 // "change name" link. No login needed — the browser remembers who they are.
@@ -4411,8 +4653,8 @@ async function enterLounge() {
   const err = handleError(handle);
   setLoungeFeedback('');
   if (err) { setLoungeFeedback(err); return; }
-  if (!storageWorks()) {
-    setLoungeFeedback("This browser isn't saving data between visits, so a name can't be claimed here. Turn off Private Browsing or allow site data/cookies for this site, then reload and try again.");
+  if (!storageWorks() && !signedInIdentity()) {
+    setLoungeFeedback("This browser isn't saving data between visits — sign in at the top first so your name stays yours.");
     return;
   }
   const btn = document.getElementById('lounge-enter-btn');
@@ -5136,6 +5378,7 @@ async function refreshCorrList() {
   if (!name || !hasBackend()) {
     if (listEl) listEl.innerHTML = '';
     renderCorrBadge(0);
+    setGamesEmpty(true);
     return;
   }
   const r = await apiPostJson('/corr/list', { name, secret: mySecret() }, 7000);
@@ -5143,6 +5386,11 @@ async function refreshCorrList() {
     renderCorrList(r.data.games);
     renderCorrBadge(r.data.awaiting || 0);
   }
+}
+
+function setGamesEmpty(empty) {
+  const el = document.getElementById('games-empty');
+  if (el) el.style.display = empty ? 'block' : 'none';
 }
 
 function renderCorrBadge(n) {
@@ -5162,6 +5410,7 @@ function corrOppLabel(g) {
 function renderCorrList(games) {
   const el = document.getElementById('corr-list');
   if (!el) return;
+  setGamesEmpty(!games.some(g => g.phase !== 'finished'));
   if (!games.length) { el.innerHTML = ''; return; }
   const rank = g => g.phase === 'finished' ? 2 : (g.yourTurn ? 0 : 1);
   const sorted = games.slice().sort((a, b) => rank(a) - rank(b) || (b.updatedTs || 0) - (a.updatedTs || 0));
@@ -5207,11 +5456,21 @@ function initCorr() {
 
 // Init local player slots
 addPlayer('Player 1'); addPlayer('Player 2'); addPlayer('Player 3');
+renderAccountCard();
 initLeaderboard();
 renderDailyHomeBadge();
 checkResumeSession();
 initLounge();
 initCorr();
+// Pull the account's streak (and push anything queued) before anything else
+// relies on it; re-draw the board once we know who "you" are.
+syncAccount().then(() => { rerenderLeaderboardFromCache(); refreshCorrList(); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') onAppResume(); });
+window.addEventListener('pageshow', e => { if (e.persisted) onAppResume(); });
+window.addEventListener('online', () => { if (getPendingDaily().length) autoSaveDaily(); });
+// Ask the browser not to evict our storage (honoured by iOS for home-screen
+// apps). Nice to have only — the account covers it if it's refused.
+try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); } catch(e) {}
 
 // Last-chance snapshot if the host closes or reloads the tab
 window.addEventListener('beforeunload', () => {
