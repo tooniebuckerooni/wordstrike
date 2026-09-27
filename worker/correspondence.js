@@ -395,6 +395,33 @@ async function corrResign(env, body) {
   return corrJson({ ok: true, game: corrRedact(game, name) });
 }
 
+// Take a match off your "your matches" list. A match you're still in is
+// resigned first (a waiting request you created is cancelled, and its join
+// code stops working); a finished one is just hidden. Removing only ever
+// touches your own list — other players keep theirs.
+async function corrDismiss(env, body) {
+  const { name, secret, gameId } = body;
+  const own = await corrOwnName(env, name, secret);
+  if (own.bad) return corrJson({ ok: false, error: 'bad-name' }, 400);
+  if (own.taken) return corrJson({ ok: false, taken: true }, 409);
+  const game = await corrLoad(env, gameId);
+  if (game) {
+    const meIdx = corrPlayerIndex(game, name);
+    if (meIdx >= 0 && game.phase !== 'finished' && !game.players[meIdx].eliminated) {
+      await corrResign(env, body);
+    }
+    const after = await corrLoad(env, gameId);
+    if (after && after.phase !== 'waiting') {
+      try { await env.LEADERBOARD.delete('corrcode:' + after.code); } catch (e) {}
+    }
+  }
+  const key = 'corridx:' + String(name).toLowerCase();
+  let list = [];
+  try { list = (await env.LEADERBOARD.get(key, 'json')) || []; } catch (e) {}
+  try { await env.LEADERBOARD.put(key, JSON.stringify(list.filter(id => id !== gameId))); } catch (e) {}
+  return corrJson({ ok: true });
+}
+
 async function corrList(env, body) {
   const { name } = body;
   const lower = String(name || '').toLowerCase();
@@ -439,6 +466,7 @@ async function handleCorrespondence(request, env, path) {
     case '/corr/move':    return corrMove(env, body);
     case '/corr/state':   return corrStateEndpoint(env, body);
     case '/corr/resign':  return corrResign(env, body);
+    case '/corr/dismiss': return corrDismiss(env, body);
     case '/corr/list':    return corrList(env, body);
     default:              return corrJson({ ok: false, error: 'unknown' }, 404);
   }
