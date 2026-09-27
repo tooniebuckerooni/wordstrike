@@ -388,6 +388,10 @@
   .corr-match-row:hover { border-color: var(--jab); }
   .corr-match-row .cm-opp { font-weight: 600; }
   .corr-match-row .cm-label { font-size: 0.76rem; white-space: nowrap; }
+  .corr-match-wrap { display: flex; gap: 5px; align-items: stretch; margin-bottom: 5px; }
+  .corr-match-wrap .corr-match-row { margin-bottom: 0; flex: 1; min-width: 0; }
+  .corr-match-x { flex: 0 0 auto; padding: 0 12px; font-size: 0.8rem; background: var(--surface-raised); color: var(--muted); border: 0.5px solid var(--line); border-radius: 8px; }
+  .corr-match-x:hover { color: var(--hit-soft); border-color: var(--hit-soft); }
   .donate-strip {
     text-align: center; padding: 0.6rem 0 0.25rem;
   }
@@ -5407,25 +5411,56 @@ function corrOppLabel(g) {
   return 'vs ' + esc(opps[0]) + ' +' + (opps.length - 1) + ' more';
 }
 
+let corrListGames = [];
 function renderCorrList(games) {
   const el = document.getElementById('corr-list');
   if (!el) return;
+  corrListGames = games;
   setGamesEmpty(!games.some(g => g.phase !== 'finished'));
   if (!games.length) { el.innerHTML = ''; return; }
   const rank = g => g.phase === 'finished' ? 2 : (g.yourTurn ? 0 : 1);
   const sorted = games.slice().sort((a, b) => rank(a) - rank(b) || (b.updatedTs || 0) - (a.updatedTs || 0));
-  let html = '<div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">your matches</div>';
+  const finished = games.filter(g => g.phase === 'finished').length;
+  let html = '<div style="display:flex;justify-content:space-between;align-items:baseline;font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;"><span>your matches</span>' +
+    (finished ? '<a href="#" class="acct-link" style="text-transform:none;letter-spacing:0;" onclick="corrClearFinished(this);return false;">clear finished (' + finished + ')</a>' : '') + '</div>';
   sorted.slice(0, 8).forEach(g => {
     let label, color;
     if (g.phase === 'waiting') { label = 'waiting · ' + g.playerCount + '/' + g.target + ' · ' + g.code; color = 'var(--muted)'; }
     else if (g.phase === 'finished') { label = g.youWon ? 'you won 🏆' : 'you lost'; color = 'var(--muted)'; }
     else if (g.yourTurn) { label = 'your move 🥊'; color = 'var(--jab-soft)'; }
     else { label = 'their move…'; color = 'var(--muted)'; }
-    html += '<button class="corr-match-row" onclick="openCorrById(\'' + esc(g.id) + '\')">' +
+    const id = esc(g.id);
+    html += '<div class="corr-match-wrap"><button class="corr-match-row" onclick="openCorrById(\'' + id + '\')">' +
       '<span class="cm-opp">' + corrOppLabel(g) + '</span>' +
-      '<span class="cm-label" style="color:' + color + '">' + label + '</span></button>';
+      '<span class="cm-label" style="color:' + color + '">' + label + '</span></button>' +
+      '<button class="corr-match-x" title="Remove" aria-label="Remove this match" onclick="corrDismiss(\'' + id + '\')">✕</button></div>';
   });
   el.innerHTML = html;
+}
+
+// Remove a match from your list. Anything still in play is resigned first
+// (a waiting request you sent is cancelled), so ask before doing that.
+async function corrDismiss(gameId) {
+  const g = corrListGames.find(x => x.id === gameId);
+  const id = signedInIdentity() || getIdentity();
+  const name = id ? id.handle : getSavedPlayerName();
+  if (!g || !name) return;
+  if (g.phase === 'waiting' && !confirm('Cancel this match request? Its code (' + g.code + ') will stop working.')) return;
+  if (g.phase === 'active' && !confirm('Remove this match? You\'ll forfeit — the others play on without you.')) return;
+  renderCorrList(corrListGames.filter(x => x.id !== gameId));
+  const r = await apiPostJson('/corr/dismiss', { name, secret: mySecret(), gameId }, 8000);
+  if (!r || !r.ok) alert("Couldn't remove that match — check your connection and try again.");
+  refreshCorrList();
+}
+async function corrClearFinished(link) {
+  const id = signedInIdentity() || getIdentity();
+  const name = id ? id.handle : getSavedPlayerName();
+  const done = corrListGames.filter(g => g.phase === 'finished');
+  if (!name || !done.length) return;
+  if (link) link.textContent = 'clearing…';
+  renderCorrList(corrListGames.filter(g => g.phase !== 'finished'));
+  await Promise.all(done.map(g => apiPostJson('/corr/dismiss', { name, secret: mySecret(), gameId: g.id }, 8000)));
+  refreshCorrList();
 }
 
 async function openCorrById(id) {
