@@ -26,5 +26,9 @@
   "account_id": "1507efb50324cd0f223d30adf094565f",
   "kv_namespaces": [
     { "binding": "LEADERBOARD", "id": "859f305dd20940c6b4730047e036dd54" }
-  ]
+  ],
+  // Rebuilds the leaderboard's streak + weekly sections from every player's
+  // own record (rebuildBoard in wordjab-api.js), so an entry dropped by a
+  // concurrent KV write heals within minutes instead of staying lost.
+  "triggers": { "crons": ["*/10 * * * *"] }
 }
