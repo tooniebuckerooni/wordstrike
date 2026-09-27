@@ -496,12 +496,56 @@ const RECOVERY_COOLDOWN_MS = 60 * 60 * 1000;
 const clean = (s, n) => String(s == null ? '' : s).slice(0, n);
 const num = (v) => { const x = parseInt(v); return isNaN(x) ? 0 : x; };
 
-const BAD = ['fuck', 'shit', 'cunt', 'nigg', 'fagg', 'bitch', 'cock', 'dick', 'puss', 'whore', 'slut', 'rape', 'nazi', 'hitler'];
+// ── Profanity check (kept identical in index.html and worker/wordjab-api.js) ──
+// Catches the obvious dodges — l33t digits (sh1t), stretched letters
+// (fuuuck), spaces or dots between letters (f u c k) — while leaving
+// ordinary words that merely contain a short bad word alone (grape, Dickens,
+// peacock, class). PROFANE_ANY match anywhere in the name; PROFANE_WORDS only
+// as a whole word.
+const PROFANE_ANY = ['fuck','fvck','fuk','fck','fcuk','phuck','fuq','cunt','nigg','nigger','fagg','faggot','shit','bitch','biatch',
+  'whore','slut','nazi','hitler','twat','wank','kike','retard','asshole','arsehole','jizz','dildo','cocksuck','motherf',
+  'penis','vagina','porn','molest','bollock','bastard','clit','boner','horny','milf','hentai','handjob','blowjob'];
+const PROFANE_WORDS = ['cock','cocks','dick','dicks','dik','puss','pussy','pussies','rape','raped','raping','rapist','ass','arse','asses',
+  'cum','tit','tits','titty','titties','fag','fags','hoe','hoes','spic','chink','pedo','pedos','sex','sexy','anal','coon',
+  'gook','dyke','homo','nig','nigs','negro','kkk','wtf','stfu','gtfo','ho'];
+const PROFANE_LEET = { '0':'o','1':'i','!':'i','|':'i','3':'e','4':'a','@':'a','5':'s','$':'s','7':'t','+':'t','8':'b','9':'g' };
+const profCollapse = s => s.replace(/(.)\1+/g, '$1');
+function isProfane(text) {
+  const norm = String(text || '').toLowerCase().replace(/[01!|3457@$+89]/g, c => PROFANE_LEET[c]);
+  const flat = norm.replace(/[^a-z]/g, '');
+  const flatC = profCollapse(flat);
+  if (PROFANE_ANY.some(w => flat.includes(w) || (profCollapse(w) === w && flatC.includes(w)))) return true;
+  return norm.split(/[^a-z]+/).some(t => t && (PROFANE_WORDS.includes(t) || PROFANE_WORDS.includes(profCollapse(t))));
+}
+
 function nameError(name) {
   if (!/^[a-zA-Z0-9 _-]{2,16}$/.test(name)) return 'Name must be 2-16 letters, numbers, or spaces.';
-  const flat = name.toLowerCase().replace(/[^a-z]/g, '');
-  if (BAD.some(w => flat.includes(w))) return 'Pick a friendlier name.';
+  if (isProfane(name)) return 'Pick a friendlier name.';
   return null;
+}
+
+// Strips profane names off every section of the board. Game results with a
+// profane winner are dropped; a profane opponent is shown as "Player".
+// Returns true if anything changed.
+function scrubBoard(data) {
+  let changed = false;
+  const keep = (list, nameOf) => {
+    const out = (list || []).filter(e => e && !isProfane(nameOf(e)));
+    if (out.length !== (list || []).length) changed = true;
+    out.forEach(e => {
+      if (Array.isArray(e.players) && e.players.some(isProfane)) {
+        e.players = e.players.map(p => (isProfane(p) ? 'Player' : p));
+        changed = true;
+      }
+    });
+    return out;
+  };
+  data.topScores = keep(data.topScores, e => e.name);
+  data.longestGames = keep(data.longestGames, e => e.winner);
+  data.recentGames = keep(data.recentGames, e => e.winner);
+  data.dailyStreaks = keep(data.dailyStreaks, e => e.name);
+  if (data.weekly) data.weekly.entries = keep(data.weekly.entries, e => e.name);
+  return changed;
 }
 
 async function loadLB(env) {
@@ -667,15 +711,16 @@ async function rebuildBoard(env) {
   // a partial rebuild never drops anyone.
   const seen = new Set(metas.map(m => m.n.toLowerCase()));
   const carried = data.dailyStreaks.filter(e => e && e.name && !seen.has(e.name.toLowerCase()));
-  const fresh = metas.filter(m => m.b > 0 || m.s > 0)
+  const fresh = metas.filter(m => (m.b > 0 || m.s > 0) && !isProfane(m.n))
     .map(m => ({ name: m.n, streak: m.s, best: m.b, lastDay: m.d, ts: Date.now() }));
   data.dailyStreaks = pruneStreaks([...carried, ...fresh], today);
 
   const carriedWeek = (data.weekly && data.weekly.weekIndex === week ? data.weekly.entries : [])
     .filter(e => e && e.name && !seen.has(e.name.toLowerCase()));
+  scrubBoard(data);
   data.weekly = {
     weekIndex: week,
-    entries: [...carriedWeek, ...metas.filter(m => m.wi === week && m.ww > 0).map(m => ({ name: m.n, wins: m.ww }))]
+    entries: [...carriedWeek, ...metas.filter(m => m.wi === week && m.ww > 0 && !isProfane(m.n)).map(m => ({ name: m.n, wins: m.ww }))]
       .sort((a, b) => (b.wins || 0) - (a.wins || 0)).slice(0, BOARD_WEEKLY_KEEP),
   };
   await saveLB(env, data);
@@ -739,7 +784,9 @@ export default {
 
     try {
       if (url.pathname === '/leaderboard' && request.method === 'GET') {
-        return send(withLiveStreaks(await loadLB(env)));
+        const data = await loadLB(env);
+        scrubBoard(data);
+        return send(withLiveStreaks(data));
       }
 
       // Create a name, or sign in to one. Same endpoint for both so the
@@ -902,6 +949,11 @@ export default {
           ts: Date.now(),
         };
         if (!entry.winner) return send({ error: 'bad input' }, 400);
+        // Local and live games take any typed name, so this is the backstop:
+        // a profane winner never reaches the board, a profane opponent shows
+        // as "Player".
+        if (isProfane(entry.winner)) return send({ ok: true, skipped: true });
+        entry.players = entry.players.map(p => (isProfane(p) ? 'Player' : p));
         const data = await loadLB(env);
         data.recentGames = [entry, ...(data.recentGames || [])].slice(0, 20);
         if (entry.mode === 'points') {
