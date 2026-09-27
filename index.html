@@ -1286,6 +1286,8 @@ function startLocalGame() {
   const names = Array.from(document.querySelectorAll('#player-list .player-entry input'))
     .map((el,i) => el.value.trim()||'Player '+(i+1));
   if (names.length < 2) { alert('Add at least 2 players!'); return; }
+  const rude = names.find(isProfane);
+  if (rude) { alert('"' + rude + '" isn\'t allowed — pick a friendlier name.'); return; }
   players = names.map(mkPlayer);
   currentEntryIndex = 0; currentRound = 0;
   showLocalEntry();
@@ -1314,6 +1316,7 @@ async function createGame() {
   const name = document.getElementById('host-name').value.trim();
   setErr('online-setup-error','');
   if (!name) { setErr('online-setup-error','Enter your name.'); return; }
+  if (isProfane(name)) { setErr('online-setup-error','Pick a friendlier name.'); return; }
 
   charCount = clampInt(document.getElementById('o-char-count').value, 4, 30, 10);
   rounds    = clampInt(document.getElementById('o-rounds').value, 1, 20, 5);
@@ -1349,6 +1352,7 @@ async function joinGame() {
   const code = document.getElementById('join-code').value.trim().toUpperCase();
   setErr('join-error','');
   if (!name) { setErr('join-error','Enter your name.'); return; }
+  if (isProfane(name)) { setErr('join-error','Pick a friendlier name.'); return; }
   if (code.length !== 4) { setErr('join-error','Enter the 4-letter code.'); return; }
 
   isOnline = true; isHost = false; botMode = false; myName = name; gameCode = code;
@@ -3097,7 +3101,7 @@ function appendChat(name, text, isSystem) {
     if (isSystem) {
       div.textContent = text;
     } else {
-      div.innerHTML = `<span class="chat-name" style="color:${safeColor(color)}">${esc(name)}</span>${esc(text)}`;
+      div.innerHTML = `<span class="chat-name" style="color:${safeColor(color)}">${esc(maskProfanity(name))}</span>${esc(maskProfanity(text))}`;
     }
     el.appendChild(div);
     el.scrollTop = el.scrollHeight;
@@ -4507,11 +4511,34 @@ function mySecret() {
   return s;
 }
 
-const HANDLE_BLOCKLIST = ['fuck','shit','cunt','nigg','fagg','bitch','cock','dick','puss','whore','slut','rape','nazi','hitler'];
+// ── Profanity check (kept identical in index.html and worker/wordjab-api.js) ──
+// Catches the obvious dodges — l33t digits (sh1t), stretched letters
+// (fuuuck), spaces or dots between letters (f u c k) — while leaving
+// ordinary words that merely contain a short bad word alone (grape, Dickens,
+// peacock, class). PROFANE_ANY match anywhere in the name; PROFANE_WORDS only
+// as a whole word.
+const PROFANE_ANY = ['fuck','fvck','fuk','fck','fcuk','phuck','fuq','cunt','nigg','nigger','fagg','faggot','shit','bitch','biatch',
+  'whore','slut','nazi','hitler','twat','wank','kike','retard','asshole','arsehole','jizz','dildo','cocksuck','motherf',
+  'penis','vagina','porn','molest','bollock','bastard','clit','boner','horny','milf','hentai','handjob','blowjob'];
+const PROFANE_WORDS = ['cock','cocks','dick','dicks','dik','puss','pussy','pussies','rape','raped','raping','rapist','ass','arse','asses',
+  'cum','tit','tits','titty','titties','fag','fags','hoe','hoes','spic','chink','pedo','pedos','sex','sexy','anal','coon',
+  'gook','dyke','homo','nig','nigs','negro','kkk','wtf','stfu','gtfo','ho'];
+const PROFANE_LEET = { '0':'o','1':'i','!':'i','|':'i','3':'e','4':'a','@':'a','5':'s','$':'s','7':'t','+':'t','8':'b','9':'g' };
+const profCollapse = s => s.replace(/(.)\1+/g, '$1');
+function isProfane(text) {
+  const norm = String(text || '').toLowerCase().replace(/[01!|3457@$+89]/g, c => PROFANE_LEET[c]);
+  const flat = norm.replace(/[^a-z]/g, '');
+  const flatC = profCollapse(flat);
+  if (PROFANE_ANY.some(w => flat.includes(w) || (profCollapse(w) === w && flatC.includes(w)))) return true;
+  return norm.split(/[^a-z]+/).some(t => t && (PROFANE_WORDS.includes(t) || PROFANE_WORDS.includes(profCollapse(t))));
+}
+// Chat: blank out profane words rather than blocking the message.
+function maskProfanity(text) {
+  return String(text || '').split(/(\s+)/).map(t => (t.trim() && isProfane(t) ? '*'.repeat(t.length) : t)).join('');
+}
 function handleError(h) {
   if (!/^[a-zA-Z0-9 _-]{2,16}$/.test(h)) return 'Fight names are 2–16 letters, numbers, or spaces.';
-  const flat = h.toLowerCase().replace(/[^a-z]/g, '');
-  if (HANDLE_BLOCKLIST.some(w => flat.includes(w))) return 'Pick a friendlier fight name.';
+  if (isProfane(h)) return 'Pick a friendlier fight name.';
   return null;
 }
 
