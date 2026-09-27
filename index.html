@@ -4281,7 +4281,8 @@ function syncAccount() {
       _lastSync = Date.now();
       applyServerProfile(r.data.profile);
       if (getPendingDaily().length) await flushPendingDaily();
-    } else if (r && (r.status === 403 || r.status === 404)) {
+    } else if (r && (r.status === 403 || (r.status === 404 && r.data.error === 'unknown name'))) {
+      // (A bare 404 means a Worker without /me — not a signed-out device.)
       accountAuthLost = true;
     }
   })().catch(() => {}).finally(() => {
