@@ -3678,6 +3678,19 @@ const SUNDAY_HARD_WORDS = ['FOXHOLE','JUGGLER','WAXWORK','JAYWALK','JACKRABBIT',
   'GAZPACHO','BUZZARD','MARZIPAN','ZEBU','QUICKSTEP','KUMQUAT','EARTHQUAKE','CROQUET','SQUID',
   'KICKBOXING','JACKFRUIT','MUSKOX','LUNCHBOX','JUGGLING','JOYRIDE','PAJAMAS','TOOLBOX','JAGUAR',
   'BANJO','JOGGING','TUXEDO','LYNX','JUDO'];
+// Third Sunday batch (2026-10) — same rule as the pool above (every word has
+// a J, Q, X or Z), same word-list/dedupe/profanity pipeline as
+// DAILY_WORDS_EXTRA. Played after the existing Sunday order (see
+// SUNDAY_WORD_ORDER) so no Sunday already scheduled changes.
+const SUNDAY_HARD_WORDS_EXTRA = ['JACKET','JALAPENO','JINGLE','JOGGER','JUMBO','JURY','JOURNAL','JEWEL','JEWELRY','JELLY','JERSEY',
+  'JITTERBUG','JUICE','JUICER','JUMPSUIT','JUNCTION','DOJO','NINJA','QUAKE','QUEEN','QUEST','QUILL',
+  'QUINCE','QUINOA','QUOTE','SQUASH','SQUEAK','SQUEEZE','SQUIRE','RACQUET','TORQUE','LIQUID',
+  'LACQUER','SEQUOIA','MOSQUE','TURQUOISE','EQUINOX','MARQUEE','SQUAD','SQUALL','AXOLOTL','EXCAVATOR',
+  'EXPLORER','JINX','ONYX','OXYGEN','PIXEL','SPHINX','TAXI','TEXTBOOK','VIXEN','PHOENIX','BOXCAR',
+  'FOXTROT','OXBOW','AXLE','AZALEA','BLAZER','BREEZE','BRONZE','CITIZEN','FREEZER','GIZMO','GLAZE',
+  'HAZARD','JAZZ','MAZE','MOZZARELLA','MUZZLE','NOZZLE','OZONE','PIZZA','PLAZA','RAZOR','SNOOZE',
+  'TRAPEZE','WALTZ','ZENITH','ZINC','ZEST','BLAZE','BONANZA','GAZETTE','ORGANZA','PIAZZA','SELTZER',
+  'SCHNITZEL','STANZA','BUZZER','SNEEZE'];
 const DAILY_KEY = 'wj_daily_v1';
 const DAILY_ROUNDS = 6;
 
@@ -3765,7 +3778,8 @@ const WORD_ORDER = buildWordOrder();
 // Sunday's own weekly-indexed cycle through the tougher pool — entirely
 // separate from WORD_ORDER above, so it never displaces a normal-rotation
 // day; that day's regular word just lands on its next lap through the cycle.
-const SUNDAY_WORD_ORDER = shuffledOrder(9004, SUNDAY_HARD_WORDS.length).map(i => SUNDAY_HARD_WORDS[i]);
+const SUNDAY_WORD_ORDER = shuffledOrder(9004, SUNDAY_HARD_WORDS.length).map(i => SUNDAY_HARD_WORDS[i])
+  .concat(shuffledOrder(9104, SUNDAY_HARD_WORDS_EXTRA.length).map(i => SUNDAY_HARD_WORDS_EXTRA[i]));
 
 // Days whose word was already served before a later list fix replaced it
 // in place — pinned so everyone who played that day keeps seeing the word
@@ -3874,13 +3888,13 @@ async function openDailyJab() {
   const state = getDailyState();
   const today = todayStr();
   if (state.lastPlayedDate === today) {
-    dailyIsHardSunday = SUNDAY_HARD_WORDS.includes(getDailyWord());
+    dailyIsHardSunday = SUNDAY_WORD_ORDER.includes(getDailyWord());
     showDailyResultScreen(state.lastResult === 'win', getDailyWord(), state.lastRoundsLeft||0, state);
     return;
   }
   const word = getDailyWord();
   dailyPlayDate = today;
-  dailyIsHardSunday = SUNDAY_HARD_WORDS.includes(word);
+  dailyIsHardSunday = SUNDAY_WORD_ORDER.includes(word);
   dailyTiles = word.split('').map(ch => ({ char: ch, revealed: false }));
   dailyWrong = new Set();
   dailyRoundsLeft = DAILY_ROUNDS;
