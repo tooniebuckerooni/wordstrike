@@ -90,7 +90,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://cdn.ably.com">
-<link href="https://fonts.googleapis.com/css2?family=Anton&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Black&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 
   :root {
@@ -533,6 +533,231 @@
 </style>
 </head>
 <body>
+
+<!-- ===== First-open intro: plays once per browser (new and returning visitors), skipped for invite links and reduced motion ===== -->
+<style>
+  #wj-intro { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; padding: 16px;
+    background: var(--inset); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  #wj-intro.wji-out { transition: opacity .5s ease; opacity: 0; pointer-events: none; }
+  .wji-stage { position: relative; width: min(100%, 1100px, calc((100vh - 110px) * 16 / 9)); aspect-ratio: 16 / 9;
+    container-type: inline-size; overflow: hidden; border-radius: 10px;
+    background: radial-gradient(ellipse 60% 70% at 50% 42%, #2c1f52 0%, var(--surface) 55%, var(--ink) 100%);
+    box-shadow: 0 0 0 1px var(--line), 0 30px 80px -30px #000; }
+  .wji-ropes { position: absolute; inset: auto 0 9% 0; height: 6%; display: grid; gap: 22%; opacity: .35; }
+  .wji-ropes i { display: block; height: 2px; background: linear-gradient(90deg, transparent, #7b5cf0 20%, #7b5cf0 80%, transparent); }
+  .wji-chip { position: absolute; top: 4.5cqw; left: 4.5cqw; font: 1.5cqw/1 'Archivo Black', 'Arial Black', sans-serif;
+    letter-spacing: .14em; text-transform: uppercase; background: var(--jab); color: var(--ink); padding: .7cqw 1.1cqw; border-radius: .4cqw; }
+  .wji-jabs { position: absolute; top: 4.5cqw; right: 4.5cqw; display: flex; align-items: center; gap: .9cqw;
+    font: 1.4cqw/1 'Archivo Black', 'Arial Black', sans-serif; letter-spacing: .14em; color: var(--muted); text-transform: uppercase; }
+  .wji-jabs b { width: 1.3cqw; height: 1.3cqw; border-radius: 50%; background: var(--jab); transition: background .25s, transform .25s; }
+  .wji-jabs b.gone { background: var(--line); transform: scale(.7); }
+  .wji-line { position: absolute; left: 0; right: 0; top: 15%; text-align: center; padding: 0 6cqw;
+    font: 4.8cqw/1.05 'Anton', Impact, sans-serif; text-transform: uppercase; color: var(--paper); }
+  .wji-line em { font-style: normal; color: var(--jab); }
+  .wji-board { position: absolute; left: 50%; top: 58%; transform: translate(-50%, -50%); display: grid; justify-items: center; gap: 1.3cqw; }
+  .wji-row { display: flex; gap: 1cqw; }
+  .wji-gap { width: 3.2cqw; }
+  .wji-t { width: 7.4cqw; aspect-ratio: 4 / 5; position: relative; }
+  .wji-t > span { position: absolute; inset: 0; display: grid; place-items: center; border-radius: .9cqw;
+    font: 4.8cqw/1 'Archivo Black', 'Arial Black', sans-serif; }
+  .wji-back { background: var(--surface-raised); box-shadow: inset 0 0 0 .2cqw #4a3a72, 0 .8cqw 0 #0d0918; }
+  .wji-back::after { content: ""; width: 45%; height: .45cqw; background: #4a3a72; border-radius: 1cqw; margin-top: 45%; }
+  .wji-front { background: var(--jab); color: var(--ink); box-shadow: 0 .8cqw 0 #9a6b00; opacity: 0; }
+  .wji-t.on .wji-front { opacity: 1; }
+  .wji-t.on .wji-back { opacity: 0; }
+  .wji-proj { position: absolute; left: 0; top: 0; opacity: 0; font: 10cqw/1 'Archivo Black', 'Arial Black', sans-serif;
+    color: var(--paper); text-shadow: 0 0 3cqw #7b5cf0aa; will-change: transform; }
+  .wji-stamp { position: absolute; left: 50%; top: 88%; transform: translate(-50%, -50%) rotate(-6deg); opacity: 0;
+    font: 3.6cqw/1 'Anton', Impact, sans-serif; letter-spacing: .06em; padding: .4cqw 1.6cqw; border: .45cqw solid currentColor; border-radius: .6cqw; }
+  .wji-stamp.hit { color: var(--jab); }
+  .wji-stamp.miss { color: var(--hit); }
+  .wji-flash { position: absolute; inset: 0; background: var(--jab); opacity: 0; mix-blend-mode: screen; pointer-events: none; }
+  .wji-logo { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 1.4cqw; opacity: 0; text-align: center; }
+  .wji-glove { font-size: 9cqw; line-height: 1; }
+  .wji-name { font: 13cqw/.9 'Anton', Impact, sans-serif; text-transform: uppercase; letter-spacing: .01em; color: var(--paper); }
+  .wji-name span { color: var(--jab); }
+  .wji-tag { font: 2.1cqw/1 'Archivo Black', 'Arial Black', sans-serif; letter-spacing: .35em; text-transform: uppercase; color: var(--muted-2); }
+  .wji-skip { position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 10000;
+    font: 600 15px/1 'Work Sans', system-ui, sans-serif; color: var(--paper); background: transparent;
+    border: 1px solid var(--line); border-radius: 999px; padding: 11px 20px; cursor: pointer; }
+  .wji-skip:hover { border-color: var(--jab); color: var(--jab); }
+  .wji-skip:focus-visible { outline: 3px solid var(--jab); outline-offset: 3px; }
+  @media (orientation: portrait) {
+    .wji-stage { aspect-ratio: 4 / 5; width: min(100%, calc((100vh - 110px) * 4 / 5)); }
+    .wji-chip { font-size: 2.6cqw; padding: 1.2cqw 1.8cqw; }
+    .wji-jabs { font-size: 2.4cqw; gap: 1.4cqw; }
+    .wji-jabs b { width: 2.2cqw; height: 2.2cqw; }
+    .wji-line { top: 14%; font-size: 7.4cqw; }
+    .wji-board { top: 54%; gap: 2cqw; }
+    .wji-row { gap: 1cqw; }
+    .wji-gap { width: 3.5cqw; }
+    .wji-t { width: 10.2cqw; }
+    .wji-t > span { font-size: 6.6cqw; border-radius: 1.3cqw; }
+    .wji-proj { font-size: 14cqw; }
+    .wji-stamp { top: 82%; font-size: 6cqw; }
+    .wji-glove { font-size: 15cqw; }
+    .wji-name { font-size: 19cqw; }
+    .wji-tag { font-size: 3.4cqw; }
+  }
+</style>
+<div id="wj-intro" aria-label="WordJab intro">
+  <div class="wji-stage" aria-hidden="true">
+    <div class="wji-ropes"><i></i><i></i><i></i></div>
+    <div class="wji-chip">Daily Jab</div>
+    <div class="wji-jabs">Jabs <b></b><b></b><b></b><b></b><b></b><b></b></div>
+    <div class="wji-line"></div>
+    <div class="wji-board"></div>
+    <div class="wji-stamp"></div>
+    <div class="wji-proj"></div>
+    <div class="wji-flash"></div>
+    <div class="wji-logo">
+      <div class="wji-glove">🥊</div>
+      <div class="wji-name">Word<span>Jab</span></div>
+      <div class="wji-tag">guess · jab · win</div>
+    </div>
+  </div>
+  <button type="button" class="wji-skip">Skip intro</button>
+</div>
+<script>
+(function () {
+  var KEY = 'wj_intro_v1';
+  var el = document.getElementById('wj-intro');
+  // Show once per browser. New and returning players alike get it, because the flag is new.
+  var show = false;
+  try {
+    var q = new URLSearchParams(location.search);
+    var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var invited = q.has('join') || q.has('corr');
+    show = !reduce && !invited && !!el.animate && localStorage.getItem(KEY) !== '1';
+    if (show) localStorage.setItem(KEY, '1'); // set up front so a reload mid-intro doesn't replay it
+  } catch (e) { show = false; } // no storage = can't promise "once", so don't show
+  if (!show) { el.remove(); return; }
+
+  var ROWS = ['JAB YOUR', 'FRIENDS'];
+  var THROWS = ['T', 'E', 'R', 'K', 'O', 'N', 'S', 'A', 'D', 'I', 'U', 'B', 'Y', 'F', 'J'];
+  var BT = 'translate(-50%,-50%)';
+  var q$ = function (s) { return el.querySelector(s); };
+  var stage = q$('.wji-stage'), board = q$('.wji-board'), line = q$('.wji-line'), proj = q$('.wji-proj'),
+      stamp = q$('.wji-stamp'), flash = q$('.wji-flash'), logo = q$('.wji-logo'), chip = q$('.wji-chip'),
+      jabs = q$('.wji-jabs'), pips = [].slice.call(jabs.querySelectorAll('b')), skipBtn = q$('.wji-skip');
+  var tiles = [], done = false, prevOverflow = document.documentElement.style.overflow;
+  document.documentElement.style.overflow = 'hidden';
+
+  ROWS.forEach(function (word) {
+    var row = document.createElement('div'); row.className = 'wji-row';
+    word.split('').forEach(function (ch) {
+      if (ch === ' ') { var g = document.createElement('div'); g.className = 'wji-gap'; row.appendChild(g); return; }
+      var t = document.createElement('div'); t.className = 'wji-t'; t.dataset.ch = ch;
+      t.innerHTML = '<span class="wji-back"></span><span class="wji-front">' + ch + '</span>';
+      row.appendChild(t); tiles.push(t);
+    });
+    board.appendChild(row);
+  });
+
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  function anim(n, kf, o) { if (done) return Promise.resolve(); o = Object.assign({ fill: 'forwards' }, o); return n.animate(kf, o).finished.catch(function () {}); }
+
+  function finish() {
+    if (done) return; done = true;
+    el.classList.add('wji-out');
+    document.documentElement.style.overflow = prevOverflow;
+    setTimeout(function () { el.remove(); }, 550);
+  }
+  el.addEventListener('click', finish);
+  document.addEventListener('keydown', function onKey(e) {
+    if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') { finish(); document.removeEventListener('keydown', onKey); }
+  });
+
+  function say(html) {
+    return anim(line, [{ opacity: 1 }, { opacity: 0, transform: 'translateY(-1cqw)' }], { duration: 200, easing: 'ease-in' }).then(function () {
+      line.innerHTML = html;
+      if (html) return anim(line, [{ opacity: 0, transform: 'translateY(2cqw)' }, { opacity: 1, transform: 'none' }], { duration: 400, easing: 'cubic-bezier(.2,.8,.2,1)' });
+    });
+  }
+  function center(n) {
+    var s = stage.getBoundingClientRect(), r = n.getBoundingClientRect();
+    return { x: r.left - s.left + r.width / 2, y: r.top - s.top + r.height / 2 };
+  }
+  function stampIt(text, cls) {
+    stamp.textContent = text; stamp.className = 'wji-stamp ' + cls;
+    var T = 'translate(-50%,-50%) rotate(-6deg)';
+    anim(stamp, [{ opacity: 0, transform: T + ' scale(2)' }, { opacity: 1, transform: T + ' scale(1)', offset: .25 },
+      { opacity: 1, transform: T + ' scale(1)', offset: .75 }, { opacity: 0, transform: T + ' scale(1)' }], { duration: 600, fill: 'none' });
+  }
+  function throwLetter(letter, speed) {
+    var s = stage.getBoundingClientRect();
+    var hits = tiles.filter(function (t) { return t.dataset.ch === letter; });
+    var target = center(hits[0] || tiles[Math.floor(tiles.length / 2)]);
+    proj.textContent = letter;
+    var pw = proj.offsetWidth || s.width * .07, ph = proj.offsetHeight || s.width * .1;
+    var from = 'translate(' + (-pw) + 'px,' + (s.height * .7) + 'px) rotate(-25deg) scale(.6)';
+    var to = 'translate(' + (target.x - pw / 2) + 'px,' + (target.y - ph / 2) + 'px) rotate(0deg) scale(1)';
+    return anim(proj, [{ opacity: 1, transform: from }, { opacity: 1, transform: to }], { duration: 480 * speed, easing: 'cubic-bezier(.55,0,.9,.35)' }).then(function () {
+      if (hits.length) {
+        anim(proj, [{ opacity: 1, transform: to }, { opacity: 0, transform: to + ' scale(1.8)' }], { duration: 240 });
+        anim(flash, [{ opacity: .22 }, { opacity: 0 }], { duration: 280 });
+        stampIt(hits.length > 1 ? 'HIT ×' + hits.length : 'HIT', 'hit');
+        var half = 200 * Math.max(speed, .65);
+        return Promise.all(hits.map(function (t, k) {
+          return sleep(k * 80).then(function () {
+            return anim(t, [{ transform: 'scaleX(1) translateY(0)' }, { transform: 'scaleX(0) translateY(-1.5cqw)' }], { duration: half, easing: 'ease-in' });
+          }).then(function () {
+            t.classList.add('on');
+            return anim(t, [{ transform: 'scaleX(0) translateY(-1.5cqw)' }, { transform: 'scaleX(1.12) translateY(0)', offset: .7 }, { transform: 'scaleX(1) translateY(0)' }], { duration: half * 1.3, easing: 'ease-out' });
+          });
+        }));
+      }
+      var fall = 'translate(' + (target.x - pw / 2 - s.width * .12) + 'px,' + (s.height * 1.05) + 'px) rotate(-120deg) scale(.7)';
+      anim(proj, [{ opacity: 1, transform: to }, { opacity: 0, transform: fall }], { duration: 650, easing: 'cubic-bezier(.3,0,.8,.6)' });
+      anim(board, [0, -1.2, 1, -.6, 0].map(function (v) { return { transform: BT + ' translateX(' + v + 'cqw)' }; }), { duration: 360, fill: 'none' });
+      stampIt('MISS', 'miss');
+      var p = pips.filter(function (p) { return !p.classList.contains('gone'); })[0];
+      if (p) p.classList.add('gone');
+      return sleep(380);
+    });
+  }
+
+  async function play() {
+    await Promise.all(tiles.map(function (t, i) {
+      return anim(t, [{ opacity: 0, transform: 'translateY(-14cqw) rotate(-8deg)' }, { opacity: 1, transform: 'none' }],
+        { duration: 480, delay: i * 45, easing: 'cubic-bezier(.2,1.3,.4,1)' });
+    }));
+    await say('Everyone hides a <em>secret word.</em>');
+    await sleep(1100); if (done) return;
+    await say('Throw letters. <em>Crack theirs.</em>');
+    await sleep(250);
+    var speed = 1.05;
+    for (var i = 0; i < THROWS.length; i++) {
+      if (done) return;
+      await throwLetter(THROWS[i], speed);
+      await sleep(140 * speed);
+      speed = Math.max(.42, speed * .86);
+    }
+    if (done) return;
+    await say('');
+    anim(flash, [{ opacity: .7 }, { opacity: 0 }], { duration: 500 });
+    anim(stage, [0, 1, -1, .6, -.4, 0].map(function (v) { return { transform: 'translate(' + v + 'cqw,' + (-v * .6) + 'cqw)' }; }), { duration: 450, fill: 'none' });
+    anim(chip, [{ opacity: 1 }, { opacity: 0 }], { duration: 300 });
+    anim(jabs, [{ opacity: 1 }, { opacity: 0 }], { duration: 300 });
+    await anim(board, [{ transform: BT + ' scale(1)' }, { transform: BT + ' scale(1.18)' }], { duration: 320, easing: 'cubic-bezier(.2,1.4,.4,1)' });
+    await sleep(1500); if (done) return;
+    await anim(board, [{ opacity: 1, transform: BT + ' scale(1.18)' }, { opacity: 0, transform: BT + ' scale(1)' }], { duration: 350 });
+    anim(flash, [{ opacity: .45 }, { opacity: 0 }], { duration: 400, delay: 120 });
+    await anim(logo, [{ opacity: 0, transform: 'scale(1.6)' }, { opacity: 1, transform: 'scale(.97)', offset: .7 }, { opacity: 1, transform: 'scale(1)' }],
+      { duration: 520, easing: 'cubic-bezier(.2,.9,.3,1)' });
+    await sleep(1800);
+    finish();
+  }
+
+  // Start once the display fonts are in, but never wait more than a second.
+  var started = false;
+  function go() { if (!started) { started = true; play().catch(finish); } }
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(go);
+  setTimeout(go, 1000);
+})();
+</script>
+<!-- ===== /First-open intro ===== -->
+
 
 <noscript>
   <p style="text-align:center;padding:1rem;color:#efe9f7;">WordJab is a free multiplayer word battle game — guess letters, crack your opponents' secret words, and be the last one standing. It needs JavaScript to run; please enable it and reload.</p>
