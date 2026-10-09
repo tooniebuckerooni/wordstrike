@@ -4086,12 +4086,11 @@ let dailyIsHardSunday = false; // pinned alongside dailyPlayDate, same reason �
 
 // ── Corner hint (testing) ─────────────────────────────────────────────────────
 // Stays hidden until the player is down to their last jab, then offers a
-// quiet "Ask your corner" link. They pick ONE angle per day — each is a nudge,
+// quiet "Ask your corner" link. They pick ONE of two angles per day — each is a nudge,
 // never a letter handed over. Flip to false to pull the feature.
 const DAILY_HINTS_ENABLED = true;
-const HINT_VOWELS = 'aeiou';
 let dailyHintOpen = false;   // angle picker showing
-let dailyHintUsed = null;    // 'cut' | 'vowels' | 'count' | 'doubles' once chosen
+let dailyHintUsed = null;    // 'cut' | 'doubles' once chosen
 let dailyHintMsg = '';
 let dailyHintCut = new Set(); // letters struck out by the 'cut' angle
 
@@ -4114,8 +4113,6 @@ function renderDailyHint() {
   el.innerHTML = '<div style="font-size:0.78rem;color:var(--muted-2);">Pick one angle — your corner only gets one word in.</div>' +
     '<div class="hint-angles">' +
       '<button class="btn-secondary btn-sm" onclick="useDailyHint(\'cut\')">Cut the ring<small>strike 3 dead letters</small></button>' +
-      '<button class="btn-secondary btn-sm" onclick="useDailyHint(\'vowels\')">Read the vowels<small>how many still hiding</small></button>' +
-      '<button class="btn-secondary btn-sm" onclick="useDailyHint(\'count\')">Size it up<small>letters left to land</small></button>' +
       '<button class="btn-secondary btn-sm" onclick="useDailyHint(\'doubles\')">Spot the doubles<small>any repeats still hiding</small></button>' +
     '</div>';
 }
@@ -4137,19 +4134,12 @@ function useDailyHint(angle) {
     const cut = dead.slice(0, 3);
     cut.forEach(l => dailyHintCut.add(l));
     dailyHintMsg = 'Stay off ' + cut.map(l => l.toUpperCase()).join(', ') + ' — none of them are in there.';
-  } else if (angle === 'vowels') {
-    const n = [...hidden].filter(l => HINT_VOWELS.includes(l)).length;
-    dailyHintMsg = n === 0 ? 'No vowels left to find — it’s consonants from here.'
-      : (n + ' different vowel' + (n === 1 ? '' : 's') + ' still hiding in there.');
   } else if (angle === 'doubles') {
     // A letter's tiles all reveal together, so a hidden letter's repeats are all still hidden.
     const repeats = [...hidden].map(l => dailyTiles.filter(t => t.char.toLowerCase() === l).length).filter(c => c > 1);
     if (!repeats.length) dailyHintMsg = 'No doubles left — every hidden letter shows up just once.';
     else if (repeats.length === 1) dailyHintMsg = 'One hidden letter lands ' + (repeats[0] === 2 ? 'twice' : repeats[0] + ' times') + '.';
     else dailyHintMsg = repeats.length + ' hidden letters show up more than once.';
-  } else {
-    const n = hidden.size;
-    dailyHintMsg = n + ' different letter' + (n === 1 ? '' : 's') + ' left to land.';
   }
   dailyHintUsed = angle;
   dailyHintOpen = false;
