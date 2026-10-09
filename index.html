@@ -203,6 +203,17 @@
   .feedback.correct { color: var(--jab-soft); }
   .feedback.wrong { color: var(--hit-soft); }
   .feedback.info { color: var(--muted-2); }
+  /* Daily Jab corner hint — only surfaces on the last jab */
+  .daily-hint { text-align: center; margin-top: 0.25rem; }
+  .daily-hint:empty { display: none; }
+  .hint-toggle { background: none; border: none; color: var(--muted-2); font-size: 0.8rem; text-decoration: underline dotted; text-underline-offset: 3px; cursor: pointer; padding: 0.25rem 0.5rem; animation: hintFadeIn 0.6s ease 0.4s both; }
+  .hint-toggle:hover, .hint-toggle:focus-visible { color: var(--jab-soft); }
+  .hint-angles { display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: center; margin-top: 0.4rem; }
+  .hint-angles .btn-sm { flex: 1 1 8rem; }
+  .hint-angles small { display: block; font-size: 0.68rem; color: var(--muted-2); font-weight: 400; margin-top: 1px; }
+  .hint-msg { font-size: 0.85rem; color: var(--jab-soft); margin-top: 0.3rem; }
+  .letter-btn.hint-cut { opacity: 0.35; text-decoration: line-through; }
+  @keyframes hintFadeIn { from { opacity: 0; } to { opacity: 1; } }
   .scoreboard { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
   .scoreboard th { color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.04em; }
   .scoreboard td { padding: 6px 8px; border-bottom: 1px solid var(--line); }
@@ -1283,6 +1294,7 @@
     <h3>Throw a letter</h3>
     <div class="letter-grid" id="daily-letters"></div>
     <div class="feedback" id="daily-feedback" aria-live="polite"></div>
+    <div class="daily-hint" id="daily-hint" aria-live="polite"></div>
   </div>
   <div class="btn-row">
     <button class="btn-primary" onclick="showScreen('screen-home');renderDailyHomeBadge();" style="flex:1;">&larr; Back home</button>
@@ -4072,6 +4084,69 @@ let dailyDone = false;
 let dailyPlayDate = null; // the calendar day this round's word belongs to (pinned at open, not re-read at finish)
 let dailyIsHardSunday = false; // pinned alongside dailyPlayDate, same reason — a session spanning midnight shouldn't relabel itself mid-round
 
+// ── Corner hint (testing) ─────────────────────────────────────────────────────
+// Stays hidden until the player is down to their last jab, then offers a
+// quiet "Ask your corner" link. They pick ONE of two angles per day — each is a nudge,
+// never a letter handed over. Flip to false to pull the feature.
+const DAILY_HINTS_ENABLED = true;
+let dailyHintOpen = false;   // angle picker showing
+let dailyHintUsed = null;    // 'cut' | 'doubles' once chosen
+let dailyHintMsg = '';
+let dailyHintCut = new Set(); // letters struck out by the 'cut' angle
+
+function dailyHiddenLetters() {
+  return new Set(dailyTiles.filter(t => !t.revealed).map(t => t.char.toLowerCase()));
+}
+
+function renderDailyHint() {
+  const el = document.getElementById('daily-hint');
+  if (!el) return;
+  if (!DAILY_HINTS_ENABLED || (!dailyHintUsed && (dailyDone || dailyRoundsLeft !== 1))) { el.innerHTML = ''; return; }
+  if (dailyHintUsed) {
+    el.innerHTML = '<div class="hint-msg">\u{1F5E3}\uFE0F ' + esc(dailyHintMsg) + '</div>';
+    return;
+  }
+  if (!dailyHintOpen) {
+    el.innerHTML = '<button class="hint-toggle" onclick="openDailyHint()">Last jab… ask your corner?</button>';
+    return;
+  }
+  el.innerHTML = '<div style="font-size:0.78rem;color:var(--muted-2);">Pick one angle — your corner only gets one word in.</div>' +
+    '<div class="hint-angles">' +
+      '<button class="btn-secondary btn-sm" onclick="useDailyHint(\'cut\')">Cut the ring<small>strike 3 dead letters</small></button>' +
+      '<button class="btn-secondary btn-sm" onclick="useDailyHint(\'doubles\')">Spot the doubles<small>any repeats still hiding</small></button>' +
+    '</div>';
+}
+
+function openDailyHint() {
+  if (dailyDone || dailyHintUsed) return;
+  dailyHintOpen = true;
+  renderDailyHint();
+}
+
+function useDailyHint(angle) {
+  if (dailyDone || dailyHintUsed || dailyRoundsLeft !== 1) return;
+  const hidden = dailyHiddenLetters();
+  if (angle === 'cut') {
+    const inWord = new Set(dailyTiles.map(t => t.char.toLowerCase()));
+    const dead = 'abcdefghijklmnopqrstuvwxyz'.split('').filter(l => !inWord.has(l) && !dailyWrong.has(l));
+    // Random pick so it isn't the same three for everyone; fine to differ per player.
+    for (let i = dead.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [dead[i], dead[j]] = [dead[j], dead[i]]; }
+    const cut = dead.slice(0, 3);
+    cut.forEach(l => dailyHintCut.add(l));
+    dailyHintMsg = 'Stay off ' + cut.map(l => l.toUpperCase()).join(', ') + ' — none of them are in there.';
+  } else if (angle === 'doubles') {
+    // A letter's tiles all reveal together, so a hidden letter's repeats are all still hidden.
+    const repeats = [...hidden].map(l => dailyTiles.filter(t => t.char.toLowerCase() === l).length).filter(c => c > 1);
+    if (!repeats.length) dailyHintMsg = 'No doubles left — every hidden letter shows up just once.';
+    else if (repeats.length === 1) dailyHintMsg = 'One hidden letter lands ' + (repeats[0] === 2 ? 'twice' : repeats[0] + ' times') + '.';
+    else dailyHintMsg = repeats.length + ' hidden letters show up more than once.';
+  }
+  dailyHintUsed = angle;
+  dailyHintOpen = false;
+  renderDailyLetterGrid();
+  renderDailyHint();
+}
+
 function setFeedbackEl(id, msg, type) {
   const el = document.getElementById(id);
   if (!el) return;
@@ -4124,6 +4199,7 @@ async function openDailyJab() {
   dailyWrong = new Set();
   dailyRoundsLeft = DAILY_ROUNDS;
   dailyDone = false;
+  dailyHintOpen = false; dailyHintUsed = null; dailyHintMsg = ''; dailyHintCut = new Set();
   showScreen('screen-daily-play');
   renderDailyPlay();
 }
@@ -4151,6 +4227,7 @@ function renderDailyPlay() {
   });
 
   renderDailyLetterGrid();
+  renderDailyHint();
 }
 
 function renderDailyLetterGrid() {
@@ -4166,6 +4243,7 @@ function renderDailyLetterGrid() {
     if (correct) { b.className += ' used-correct'; b.disabled = true; }
     else if (wrong) { b.className += ' used-wrong'; b.disabled = true; }
     else if (dailyDone) { b.disabled = true; }
+    if (!correct && !wrong && dailyHintCut.has(lo)) { b.className += ' hint-cut'; b.title = 'Your corner says no'; }
     b.onclick = () => guessDailyLetter(l);
     lg.appendChild(b);
   });
@@ -4219,6 +4297,7 @@ function finishDaily(won) {
   state.lastPlayedDate = today;
   state.lastResult = won ? 'win' : 'lose';
   state.lastRoundsLeft = dailyRoundsLeft;
+  state.lastHint = !!dailyHintUsed;
   saveDailyState(state);
   // Queued before anything else, so the result survives a failed upload, a
   // closed tab, or playing signed out — it's sent the moment it can be.
@@ -4254,7 +4333,7 @@ function showDailyResultScreen(won, word, roundsLeft, state) {
   });
 
   renderDailyStreakRow(state);
-  lastDailyShare = { won, word, roundsLeft, streak: liveLocalStreak(state) };
+  lastDailyShare = { won, word, roundsLeft, streak: liveLocalStreak(state), hint: !!state.lastHint };
   renderDailySaveStatus();
 }
 
@@ -4337,13 +4416,13 @@ let lastDailyShare = null;
 
 function shareDailyResult() {
   if (!lastDailyShare) return;
-  const { won, word, roundsLeft, streak } = lastDailyShare;
+  const { won, word, roundsLeft, streak, hint } = lastDailyShare;
   const greenSquares = won ? roundsLeft : 0;
   const redSquares = DAILY_ROUNDS - greenSquares;
   const squares = '\u{1F7E9}'.repeat(greenSquares) + '\u{1F7E5}'.repeat(redSquares);
   const text = 'WordJab Daily #' + dailyDayNumber() + '\n' +
     (won ? 'Cracked it \u{1F3C6}' : 'Down for the count \u{1F94A}') + '\n' +
-    squares + '\n' +
+    squares + (hint ? ' \u{1F5E3}\uFE0F' : '') + '\n' +
     '\u{1F525} ' + streak + ' streak\n' +
     'wordjab.io';
 
