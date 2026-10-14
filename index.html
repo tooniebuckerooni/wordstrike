@@ -206,8 +206,10 @@
   /* Daily Jab corner hint — only surfaces on the last jab */
   .daily-hint { text-align: center; margin-top: 0.25rem; }
   .daily-hint:empty { display: none; }
-  .hint-toggle { background: none; border: none; color: var(--muted-2); font-size: 0.8rem; text-decoration: underline dotted; text-underline-offset: 3px; cursor: pointer; padding: 0.25rem 0.5rem; animation: hintFadeIn 0.6s ease 0.4s both; }
-  .hint-toggle:hover, .hint-toggle:focus-visible { color: var(--jab-soft); }
+  .hint-toggle { background: rgba(255, 225, 163, 0.08); border: 1.5px solid var(--jab); border-radius: 999px; color: var(--jab-soft); font-size: 0.9rem; font-weight: 700; cursor: pointer; padding: 0.55rem 1.1rem; animation: hintFadeIn 0.6s ease 0.4s both, hintPulse 1.6s ease-in-out 1s 3; }
+  .hint-toggle:hover, .hint-toggle:focus-visible { background: rgba(255, 225, 163, 0.16); }
+  .hint-note { font-size: 0.72rem; color: var(--muted-2); margin-top: 0.4rem; }
+  @keyframes hintPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
   .hint-angles { display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: center; margin-top: 0.4rem; }
   .hint-angles .btn-sm { flex: 1 1 8rem; }
   .hint-angles small { display: block; font-size: 0.68rem; color: var(--muted-2); font-weight: 400; margin-top: 1px; }
@@ -1297,7 +1299,7 @@
     <div class="daily-hint" id="daily-hint" aria-live="polite"></div>
   </div>
   <div class="btn-row">
-    <button class="btn-primary" onclick="showScreen('screen-home');renderDailyHomeBadge();" style="flex:1;">&larr; Back home</button>
+    <button class="btn-primary" onclick="leaveDailyPlay()" style="flex:1;">&larr; Back home</button>
   </div>
 </div>
 
@@ -4094,6 +4096,40 @@ let dailyHintUsed = null;    // 'cut' | 'doubles' once chosen
 let dailyHintMsg = '';
 let dailyHintCut = new Set(); // letters struck out by the 'cut' angle
 
+// ── Round in progress ─────────────────────────────────────────────────────────
+// Saved after every jab and hint, so closing the tab or backing out and coming
+// back resumes the same round — it never deals a fresh six jabs.
+const DAILY_PROGRESS_KEY = 'wj_daily_progress_v1';
+let _memProgress = null;
+function saveDailyProgress() {
+  const p = {
+    date: dailyPlayDate, word: dailyTiles.map(t => t.char).join(''),
+    found: [...new Set(dailyTiles.filter(t => t.revealed).map(t => t.char.toLowerCase()))],
+    wrong: [...dailyWrong], roundsLeft: dailyRoundsLeft,
+    hintUsed: dailyHintUsed, hintMsg: dailyHintMsg, hintCut: [...dailyHintCut]
+  };
+  _memProgress = p;
+  try { localStorage.setItem(DAILY_PROGRESS_KEY, JSON.stringify(p)); } catch(e) {}
+}
+function loadDailyProgress(date, word) {
+  let p = null;
+  try { const raw = localStorage.getItem(DAILY_PROGRESS_KEY); if (raw) p = JSON.parse(raw); } catch(e) {}
+  if (!p) p = _memProgress;
+  return (p && p.date === date && p.word === word) ? p : null;
+}
+function clearDailyProgress() {
+  _memProgress = null;
+  try { localStorage.removeItem(DAILY_PROGRESS_KEY); } catch(e) {}
+}
+function dailyRoundStarted() {
+  return !dailyDone && (dailyWrong.size > 0 || dailyTiles.some(t => t.revealed) || !!dailyHintUsed);
+}
+function leaveDailyPlay() {
+  if (dailyRoundStarted() && !confirm('Heads up: your round is saved right where it is. Jabs you\u2019ve thrown (and any hint) stay used \u2014 coming back won\u2019t reset them.\n\nHead home anyway?')) return;
+  showScreen('screen-home');
+  renderDailyHomeBadge();
+}
+
 function dailyHiddenLetters() {
   return new Set(dailyTiles.filter(t => !t.revealed).map(t => t.char.toLowerCase()));
 }
@@ -4107,10 +4143,11 @@ function renderDailyHint() {
     return;
   }
   if (!dailyHintOpen) {
-    el.innerHTML = '<button class="hint-toggle" onclick="openDailyHint()">Last jab… ask your corner?</button>';
+    el.innerHTML = '<button class="hint-toggle" onclick="openDailyHint()">\u{1F94A} Last jab! Get a hint from your corner</button>';
     return;
   }
   el.innerHTML = '<div style="font-size:0.78rem;color:var(--muted-2);">Pick one angle — your corner only gets one word in.</div>' +
+    '<div class="hint-note">\u26A0\uFE0F Your hint is locked in once you pick — leaving or reloading won\u2019t reset this round.</div>' +
     '<div class="hint-angles">' +
       '<button class="btn-secondary btn-sm" onclick="useDailyHint(\'cut\')">Cut the ring<small>strike 3 dead letters</small></button>' +
       '<button class="btn-secondary btn-sm" onclick="useDailyHint(\'doubles\')">Spot the doubles<small>any repeats still hiding</small></button>' +
@@ -4143,6 +4180,7 @@ function useDailyHint(angle) {
   }
   dailyHintUsed = angle;
   dailyHintOpen = false;
+  saveDailyProgress();
   renderDailyLetterGrid();
   renderDailyHint();
 }
@@ -4162,6 +4200,9 @@ function renderDailyHomeBadge() {
   flameEl.textContent = live > 0 ? ('\u{1F525} ' + live) : '';
   if (state.lastPlayedDate === todayStr()) {
     subEl.textContent = state.lastResult === 'win' ? "Cracked today's word. Come back tomorrow." : "Today's jab is done. Come back tomorrow.";
+  } else if (loadDailyProgress(todayStr(), getDailyWord())) {
+    const p = loadDailyProgress(todayStr(), getDailyWord());
+    subEl.textContent = 'Round in progress — ' + p.roundsLeft + ' jab' + (p.roundsLeft === 1 ? '' : 's') + ' left. Finish the fight.';
   } else if (!storageWorks() && !getIdentity()) {
     subEl.textContent = "This browser isn't saving data between visits — sign in above so your streak is kept for you.";
   } else if (new Date().getDay() === 0) {
@@ -4195,13 +4236,25 @@ async function openDailyJab() {
   const word = getDailyWord();
   dailyPlayDate = today;
   dailyIsHardSunday = SUNDAY_WORD_ORDER.includes(word);
-  dailyTiles = word.split('').map(ch => ({ char: ch, revealed: false }));
-  dailyWrong = new Set();
-  dailyRoundsLeft = DAILY_ROUNDS;
+  const saved = loadDailyProgress(today, word);
+  const found = new Set(saved ? saved.found : []);
+  dailyTiles = word.split('').map(ch => ({ char: ch, revealed: found.has(ch.toLowerCase()) }));
+  dailyWrong = new Set(saved ? saved.wrong : []);
+  dailyRoundsLeft = saved ? saved.roundsLeft : DAILY_ROUNDS;
   dailyDone = false;
-  dailyHintOpen = false; dailyHintUsed = null; dailyHintMsg = ''; dailyHintCut = new Set();
+  dailyHintOpen = false;
+  dailyHintUsed = saved ? saved.hintUsed : null;
+  dailyHintMsg = saved ? saved.hintMsg : '';
+  dailyHintCut = new Set(saved ? saved.hintCut : []);
   showScreen('screen-daily-play');
   renderDailyPlay();
+  // Closed in the split second between the final jab and the result screen
+  if (saved && (dailyRoundsLeft <= 0 || dailyTiles.every(t => t.revealed))) {
+    dailyDone = true;
+    finishDaily(dailyRoundsLeft > 0);
+    return;
+  }
+  if (saved) setFeedbackEl('daily-feedback', 'Picking up where you left off.', 'info');
 }
 
 function renderDailyPlay() {
@@ -4266,6 +4319,7 @@ function guessDailyLetter(letter) {
     sfx('wrong');
     setFeedbackEl('daily-feedback', 'Missed.', 'wrong');
   }
+  saveDailyProgress();
 
   const allRevealed = dailyTiles.every(t => t.revealed);
   if (allRevealed) {
@@ -4299,6 +4353,7 @@ function finishDaily(won) {
   state.lastRoundsLeft = dailyRoundsLeft;
   state.lastHint = !!dailyHintUsed;
   saveDailyState(state);
+  clearDailyProgress();
   // Queued before anything else, so the result survives a failed upload, a
   // closed tab, or playing signed out — it's sent the moment it can be.
   queueDailyResult({ day: dayNumberOf(today), won, roundsLeft: dailyRoundsLeft });
