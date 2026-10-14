@@ -206,10 +206,9 @@
   /* Daily Jab corner hint — only surfaces on the last jab */
   .daily-hint { text-align: center; margin-top: 0.25rem; }
   .daily-hint:empty { display: none; }
-  .hint-toggle { background: rgba(255, 225, 163, 0.08); border: 1.5px solid var(--jab); border-radius: 999px; color: var(--jab-soft); font-size: 0.9rem; font-weight: 700; cursor: pointer; padding: 0.55rem 1.1rem; animation: hintFadeIn 0.6s ease 0.4s both, hintPulse 1.6s ease-in-out 1s 3; }
-  .hint-toggle:hover, .hint-toggle:focus-visible { background: rgba(255, 225, 163, 0.16); }
-  .hint-note { font-size: 0.72rem; color: var(--muted-2); margin-top: 0.4rem; }
-  @keyframes hintPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+  .hint-offer { animation: hintFadeIn 0.6s ease 0.4s both; }
+  .hint-offer-title { font-size: 0.9rem; font-weight: 700; color: var(--jab-soft); margin-top: 0.2rem; }
+  .hint-skip { font-size: 0.72rem; color: var(--muted-2); margin-top: 0.35rem; }
   .hint-angles { display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: center; margin-top: 0.4rem; }
   .hint-angles .btn-sm { flex: 1 1 8rem; }
   .hint-angles small { display: block; font-size: 0.68rem; color: var(--muted-2); font-weight: 400; margin-top: 1px; }
@@ -1299,7 +1298,7 @@
     <div class="daily-hint" id="daily-hint" aria-live="polite"></div>
   </div>
   <div class="btn-row">
-    <button class="btn-primary" onclick="leaveDailyPlay()" style="flex:1;">&larr; Back home</button>
+    <button class="btn-primary" onclick="showScreen('screen-home');renderDailyHomeBadge();" style="flex:1;">&larr; Back home</button>
   </div>
 </div>
 
@@ -4087,11 +4086,10 @@ let dailyPlayDate = null; // the calendar day this round's word belongs to (pinn
 let dailyIsHardSunday = false; // pinned alongside dailyPlayDate, same reason — a session spanning midnight shouldn't relabel itself mid-round
 
 // ── Corner hint (testing) ─────────────────────────────────────────────────────
-// Stays hidden until the player is down to their last jab, then offers a
-// quiet "Ask your corner" link. They pick ONE of two angles per day — each is a nudge,
+// Stays hidden until the player is down to their last jab, then the two
+// angles appear on their own. They pick ONE per day (or skip) — each is a nudge,
 // never a letter handed over. Flip to false to pull the feature.
 const DAILY_HINTS_ENABLED = true;
-let dailyHintOpen = false;   // angle picker showing
 let dailyHintUsed = null;    // 'cut' | 'doubles' once chosen
 let dailyHintMsg = '';
 let dailyHintCut = new Set(); // letters struck out by the 'cut' angle
@@ -4121,14 +4119,6 @@ function clearDailyProgress() {
   _memProgress = null;
   try { localStorage.removeItem(DAILY_PROGRESS_KEY); } catch(e) {}
 }
-function dailyRoundStarted() {
-  return !dailyDone && (dailyWrong.size > 0 || dailyTiles.some(t => t.revealed) || !!dailyHintUsed);
-}
-function leaveDailyPlay() {
-  if (dailyRoundStarted() && !confirm('Heads up: your round is saved right where it is. Jabs you\u2019ve thrown (and any hint) stay used \u2014 coming back won\u2019t reset them.\n\nHead home anyway?')) return;
-  showScreen('screen-home');
-  renderDailyHomeBadge();
-}
 
 function dailyHiddenLetters() {
   return new Set(dailyTiles.filter(t => !t.revealed).map(t => t.char.toLowerCase()));
@@ -4142,22 +4132,14 @@ function renderDailyHint() {
     el.innerHTML = '<div class="hint-msg">\u{1F5E3}\uFE0F ' + esc(dailyHintMsg) + '</div>';
     return;
   }
-  if (!dailyHintOpen) {
-    el.innerHTML = '<button class="hint-toggle" onclick="openDailyHint()">\u{1F94A} Last jab! Get a hint from your corner</button>';
-    return;
-  }
-  el.innerHTML = '<div style="font-size:0.78rem;color:var(--muted-2);">Pick one angle — your corner only gets one word in.</div>' +
-    '<div class="hint-note">\u26A0\uFE0F Your hint is locked in once you pick — leaving or reloading won\u2019t reset this round.</div>' +
+  el.innerHTML = '<div class="hint-offer">' +
+    '<div class="hint-offer-title">\u{1F94A} Last jab! Your corner offers one hint:</div>' +
     '<div class="hint-angles">' +
       '<button class="btn-secondary btn-sm" onclick="useDailyHint(\'cut\')">Cut the ring<small>strike 3 dead letters</small></button>' +
       '<button class="btn-secondary btn-sm" onclick="useDailyHint(\'doubles\')">Spot the doubles<small>any repeats still hiding</small></button>' +
-    '</div>';
-}
-
-function openDailyHint() {
-  if (dailyDone || dailyHintUsed) return;
-  dailyHintOpen = true;
-  renderDailyHint();
+    '</div>' +
+    '<div class="hint-skip">Or skip it and just throw.</div>' +
+  '</div>';
 }
 
 function useDailyHint(angle) {
@@ -4179,7 +4161,6 @@ function useDailyHint(angle) {
     else dailyHintMsg = repeats.length + ' hidden letters show up more than once.';
   }
   dailyHintUsed = angle;
-  dailyHintOpen = false;
   saveDailyProgress();
   renderDailyLetterGrid();
   renderDailyHint();
@@ -4242,7 +4223,6 @@ async function openDailyJab() {
   dailyWrong = new Set(saved ? saved.wrong : []);
   dailyRoundsLeft = saved ? saved.roundsLeft : DAILY_ROUNDS;
   dailyDone = false;
-  dailyHintOpen = false;
   dailyHintUsed = saved ? saved.hintUsed : null;
   dailyHintMsg = saved ? saved.hintMsg : '';
   dailyHintCut = new Set(saved ? saved.hintCut : []);
