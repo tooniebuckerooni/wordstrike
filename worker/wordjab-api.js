@@ -12,12 +12,16 @@
 // source of truth for what's actually running in production.
 //
 // Storage: a single KV namespace bound as env.LEADERBOARD.
-//   leaderboard          -> { topScores, longestGames, recentGames, dailyStreaks, weekly }
+//   leaderboard          -> { topScores, recentGames, dailyStreaks, weekly, totalsSince }
 //                            dailyStreaks/weekly are a derived index of the
 //                            id: records (see rebuildBoard), never the truth.
+//                            totalsSince is the first day a Daily Jab result
+//                            was counted into `wins` (the Total board's start).
 //   id:<namelower>        -> { name, secret, secrets[], streak, best, lastDay,
 //                              lastResult, lastRoundsLeft, weekIndex, weekWins,
-//                              recoverySalt, recoveryHash, createdTs }
+//                              wins, played, recoverySalt, recoveryHash, createdTs }
+//                            wins/played are lifetime Daily Jab counters. They
+//                            start at 0 for everyone (no backfill from streaks).
 //                            One record per claimed name — the source of truth
 //                            for that player's streak. `secret` / `secrets`
 //                            are the per-device tokens that prove ownership
@@ -488,6 +492,7 @@ const EPOCH = Date.UTC(2024, 0, 1);
 const serverDay = () => Math.floor((Date.now() - EPOCH) / 86400000);
 const MAX_DEVICE_SECRETS = 20;       // devices that can be signed in to one name at once
 const BOARD_BEST_KEEP = 50;          // all-time best streaks kept on the board
+const BOARD_TOTAL_KEEP = 50;         // top total-win counts kept on the board
 const BOARD_ACTIVE_KEEP = 500;       // live streaks kept on the board
 const BOARD_WEEKLY_KEEP = 100;
 const RECOVERY_MAX_FAILS = 8;
@@ -541,7 +546,6 @@ function scrubBoard(data) {
     return out;
   };
   data.topScores = keep(data.topScores, e => e.name);
-  data.longestGames = keep(data.longestGames, e => e.winner);
   data.recentGames = keep(data.recentGames, e => e.winner);
   data.dailyStreaks = keep(data.dailyStreaks, e => e.name);
   if (data.weekly) data.weekly.entries = keep(data.weekly.entries, e => e.name);
@@ -552,8 +556,9 @@ async function loadLB(env) {
   const r = await env.LEADERBOARD.get(LB_KEY);
   const d = r ? JSON.parse(r) : {};
   return {
-    topScores: d.topScores || [], longestGames: d.longestGames || [], recentGames: d.recentGames || [],
+    topScores: d.topScores || [], recentGames: d.recentGames || [],
     dailyStreaks: d.dailyStreaks || [], weekly: d.weekly || { weekIndex: 0, entries: [] },
+    totalsSince: d.totalsSince || 0,
   };
 }
 const saveLB = (env, d) => env.LEADERBOARD.put(LB_KEY, JSON.stringify(d));
@@ -564,7 +569,7 @@ const saveLB = (env, d) => env.LEADERBOARD.put(LB_KEY, JSON.stringify(d));
 function idMeta(rec) {
   return {
     v: 1, n: rec.name, s: rec.streak || 0, b: rec.best || 0, d: rec.lastDay || 0,
-    wi: rec.weekIndex || 0, ww: rec.weekWins || 0,
+    wi: rec.weekIndex || 0, ww: rec.weekWins || 0, w: rec.wins || 0,
   };
 }
 const loadId = (env, nl) => env.LEADERBOARD.get('id:' + nl, 'json');
@@ -606,14 +611,16 @@ function profile(rec, today) {
     lastResult: rec.lastResult || (lastDay ? ((rec.streak || 0) > 0 ? 'win' : 'lose') : null),
     lastRoundsLeft: rec.lastRoundsLeft == null ? null : rec.lastRoundsLeft,
     weekWins: rec.weekIndex === week ? (rec.weekWins || 0) : 0,
+    wins: rec.wins || 0,
+    played: rec.played || 0,
     hasPassword: !!rec.recoveryHash,
     today,
   };
 }
 
-// Board entry pruning: the all-time top bests, plus every streak that's
-// still alive (so a 1-day streak started today shows up too, not just the
-// veterans).
+// Board entry pruning: the all-time top bests and top win totals, plus every
+// streak that's still alive (so a 1-day streak started today shows up too,
+// not just the veterans).
 function pruneStreaks(list, today) {
   const byName = new Map();
   for (let e of list) {
@@ -628,6 +635,8 @@ function pruneStreaks(list, today) {
   const keep = new Set();
   all.slice().sort((a, b) => (b.best || 0) - (a.best || 0)).slice(0, BOARD_BEST_KEEP)
     .forEach(e => { if ((e.best || 0) > 0) keep.add(e); });
+  all.slice().sort((a, b) => (b.wins || 0) - (a.wins || 0)).slice(0, BOARD_TOTAL_KEEP)
+    .forEach(e => { if ((e.wins || 0) > 0) keep.add(e); });
   all.filter(e => (e.lastDay || 0) >= today - 2 && (e.streak || 0) > 0)
     .sort((a, b) => (b.streak || 0) - (a.streak || 0)).slice(0, BOARD_ACTIVE_KEEP)
     .forEach(e => keep.add(e));
@@ -635,7 +644,7 @@ function pruneStreaks(list, today) {
 }
 
 function boardEntry(rec) {
-  return { name: rec.name, streak: rec.streak || 0, best: rec.best || 0, lastDay: rec.lastDay || 0, ts: Date.now() };
+  return { name: rec.name, streak: rec.streak || 0, best: rec.best || 0, wins: rec.wins || 0, lastDay: rec.lastDay || 0, ts: Date.now() };
 }
 
 // Writes one player's record into the board blob. Returns true if anything changed.
@@ -647,7 +656,7 @@ function upsertPlayer(data, rec, today) {
   const cur = i >= 0 ? list[i] : null;
   const want = boardEntry(rec);
   if ((want.best > 0 || want.streak > 0) &&
-      (!cur || cur.name !== want.name || cur.streak !== want.streak || cur.best !== want.best || cur.lastDay !== want.lastDay)) {
+      (!cur || cur.name !== want.name || cur.streak !== want.streak || cur.best !== want.best || cur.wins !== want.wins || cur.lastDay !== want.lastDay)) {
     if (i >= 0) list[i] = want; else list.push(want);
     data.dailyStreaks = pruneStreaks(list, today);
     changed = true;
@@ -712,7 +721,7 @@ async function rebuildBoard(env) {
   const seen = new Set(metas.map(m => m.n.toLowerCase()));
   const carried = data.dailyStreaks.filter(e => e && e.name && !seen.has(e.name.toLowerCase()));
   const fresh = metas.filter(m => (m.b > 0 || m.s > 0) && !isProfane(m.n))
-    .map(m => ({ name: m.n, streak: m.s, best: m.b, lastDay: m.d, ts: Date.now() }));
+    .map(m => ({ name: m.n, streak: m.s, best: m.b, wins: m.w || 0, lastDay: m.d, ts: Date.now() }));
   data.dailyStreaks = pruneStreaks([...carried, ...fresh], today);
 
   const carriedWeek = (data.weekly && data.weekly.weekIndex === week ? data.weekly.entries : [])
@@ -926,13 +935,19 @@ export default {
           rec.best = Math.max(rec.best || 0, rec.streak);
           if (rec.weekIndex !== week) { rec.weekIndex = week; rec.weekWins = 0; }
           if (won) rec.weekWins = (rec.weekWins || 0) + 1;
+          // Lifetime counters for the Total board. Inside the once-per-day
+          // guard, so a replayed or duplicate result can never double-count.
+          rec.played = (rec.played || 0) + 1;
+          if (won) rec.wins = (rec.wins || 0) + 1;
           rec.lastDay = today;
           rec.lastResult = won ? 'win' : 'lose';
           rec.lastRoundsLeft = Math.max(0, Math.min(6, num(b.roundsLeft)));
           await saveId(env, nl, rec);
         }
         const data = await loadLB(env);
-        if (upsertPlayer(data, rec, today)) await saveLB(env, data);
+        let changed = upsertPlayer(data, rec, today);
+        if (!alreadyToday && !data.totalsSince) { data.totalsSince = today; changed = true; }
+        if (changed) await saveLB(env, data);
         return send({ ok: true, streak: rec.streak, best: rec.best, weekWins: rec.weekWins, already: alreadyToday, profile: profile(rec, today) });
       }
 
@@ -958,14 +973,10 @@ export default {
         data.recentGames = [entry, ...(data.recentGames || [])].slice(0, 20);
         if (entry.mode === 'points') {
           data.topScores = data.topScores || [];
-          data.topScores.push({ name: entry.winner, score: entry.score, players: entry.players, ts: entry.ts });
+          data.topScores.push({ name: entry.winner, score: entry.score, players: entry.players, rounds: entry.rounds, ts: entry.ts });
           data.topScores.sort((a, b) => (b.score || 0) - (a.score || 0));
           data.topScores = data.topScores.slice(0, 10);
         }
-        data.longestGames = data.longestGames || [];
-        data.longestGames.push({ winner: entry.winner, winnerColor: entry.winnerColor, totalGuesses: entry.totalGuesses, players: entry.players, ts: entry.ts });
-        data.longestGames.sort((a, b) => (b.totalGuesses || 0) - (a.totalGuesses || 0));
-        data.longestGames = data.longestGames.slice(0, 10);
         await saveLB(env, data);
         return send({ ok: true });
       }
