@@ -902,7 +902,7 @@
       <div id="lb-shared-content"><div class="lb-empty">Loading...</div></div>
     </div>
     <div id="lb-panel-recent" class="lb-panel">
-      <div id="lb-recent-feed"><div class="lb-empty">No games played yet on this device.</div></div>
+      <div id="lb-recent-feed"><div class="lb-empty">Loading...</div></div>
     </div>
   </div>
 
@@ -3102,7 +3102,7 @@ function playAgain() {
   turnTimer = 0;
   setConnBadge(null);
   if (botTimer) { clearTimeout(botTimer); botTimer = null; }
-  setTimeout(renderRecentFeed, 100);
+  setTimeout(() => { renderRecentFeed(); loadSharedLeaderboard(); }, 100);
   if (ablyClient) { try { ablyClient.close(); } catch(e) {} ablyClient=null; gameChannel=null; }
   players=[]; currentEntryIndex=0; currentTurn=0; currentRound=0;
   selectedTarget=null; selectedLetter=null;
@@ -3547,7 +3547,7 @@ function saveGameResult() {
 
 async function saveSharedResult(entry) {
   if (!hasBackend()) return;
-  // The Worker merges this into recentGames / topScores / longestGames.
+  // The Worker merges this into recentGames / topScores.
   try { await apiPost('/result', entry); } catch(e) {}
 }
 
@@ -3561,13 +3561,27 @@ function timeAgo(ts) {
   return new Date(ts).toLocaleDateString();
 }
 
-function renderRecentFeed() {
+// The global Recent games feed, from the same board payload as the
+// Leaderboard tab. `record` defaults to the cached board; if there's none and
+// the fetch has failed, falls back to the games saved on this device.
+function renderRecentFeed(record, failed) {
   const el = document.getElementById('lb-recent-feed');
   if (!el) return;
-  const games = getLocalGames();
-  if (games.length === 0) { el.innerHTML = '<div class="lb-empty">No games played yet on this device.</div>'; return; }
-  let html = '';
-  games.slice(0, 5).forEach((g, i) => {
+  if (!record) { const c = getCachedLeaderboard(); record = c && c.record; }
+  let games, note = '', empty = 'No games on the board yet — host one and be the first!';
+  if (record) {
+    games = record.recentGames || [];
+  } else if (failed) {
+    games = getLocalGames();
+    note = '<div style="font-size:0.68rem;color:var(--muted);text-align:center;margin-bottom:6px;">Couldn\'t reach the global feed — showing games from this device.</div>';
+    empty = 'No games played yet on this device.';
+  } else {
+    el.innerHTML = '<div class="lb-empty">Loading…</div>';
+    return;
+  }
+  if (games.length === 0) { el.innerHTML = note + '<div class="lb-empty">' + empty + '</div>'; return; }
+  let html = note;
+  games.slice(0, 8).forEach((g, i) => {
     // Inject sponsored message every 4 entries
     if (i > 0 && i % 4 === 0) {
       const sp = getSponsoredMsg();
@@ -3605,16 +3619,19 @@ async function loadSharedLeaderboard() {
   el.innerHTML = cached
     ? renderLeaderboardHtml(cached.record, false)
     : '<div class="lb-empty">Loading global leaderboard…</div>';
+  if (cached) renderRecentFeed(cached.record);
 
   const record = await readJsonBin();
   if (record) {
     el.innerHTML = renderLeaderboardHtml(record, false);
+    renderRecentFeed(record);
   } else if (cached) {
     // Couldn't refresh — keep showing the last good copy with a gentle note
     el.innerHTML = renderLeaderboardHtml(cached.record, true);
   } else {
     el.innerHTML = '<div class="lb-empty">Couldn\'t reach the global leaderboard right now.' +
       '<br><button class="btn-secondary btn-sm" style="margin-top:0.5rem;" onclick="loadSharedLeaderboard()">Retry</button></div>';
+    renderRecentFeed(null, true);
   }
 }
 
@@ -3633,7 +3650,7 @@ function withMyEntry(record) {
   const r = { ...record };
   const nl = p.name.toLowerCase();
   const rows = (r.dailyStreaks || []).filter(e => (e.name || '').toLowerCase() !== nl);
-  if (p.best > 0 || p.streak > 0) rows.push({ name: p.name, streak: p.streak, current: p.streak, best: p.best, lastDay: p.lastDay });
+  if (p.best > 0 || p.streak > 0) rows.push({ name: p.name, streak: p.streak, current: p.streak, best: p.best, wins: p.wins || 0, lastDay: p.lastDay });
   r.dailyStreaks = rows;
   if (p.weekWins > 0) {
     const wkIdx = currentWeekIndex();
@@ -3644,6 +3661,7 @@ function withMyEntry(record) {
 }
 const liveOf = e => (e.current != null ? e.current : (e.lastDay != null ? 0 : (e.streak || 0)));
 const bestOf = e => (e.best != null ? e.best : (e.streak || 0));
+const winsOf = e => e.wins || 0;
 
 function rerenderLeaderboardFromCache() {
   const el = document.getElementById('lb-shared-content');
@@ -3654,23 +3672,44 @@ function rerenderLeaderboardFromCache() {
 function lbSection(icon, title, first) {
   return '<div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin:' + (first ? '0' : '12px') + ' 0 6px;"><span aria-hidden="true">' + icon + '</span> ' + title + '</div>';
 }
-// Top-5 rows plus, if you're further down, your own row with your rank.
-function lbRankedRows(rows, myName, scoreHtml) {
-  const rl = ['gold','silver','bronze'];
-  const me = myName ? rows.findIndex(e => (e.name || '').toLowerCase() === myName.toLowerCase()) : -1;
-  let html = '';
-  rows.slice(0, 5).forEach((e, i) => {
-    const mine = me === i;
-    html += '<div class="lb-row"' + (mine ? ' style="background:var(--jab-tint);border-radius:6px;"' : '') + '><span class="lb-rank ' + (rl[i] || '') + '">' + (i+1) + '</span>';
-    html += '<span class="lb-name">' + esc(e.name) + (mine ? ' <span style="color:var(--jab);font-size:0.7rem;">(you)</span>' : '') + '</span>';
-    html += '<span class="lb-score">' + scoreHtml(e) + '</span></div>';
+// Highest first. Ties fall back through the extra keys, then name, so every
+// viewer sees the same order (not "me last").
+function lbSort(rows, ...keys) {
+  return rows.slice().sort((a, b) => {
+    for (const k of keys) { const d = k(b) - k(a); if (d) return d; }
+    return (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase());
   });
-  if (me >= 5) {
-    html += '<div class="lb-row" style="background:var(--jab-tint);border-radius:6px;margin-top:2px;"><span class="lb-rank">' + (me+1) + '</span>' +
-      '<span class="lb-name">' + esc(rows[me].name) + ' <span style="color:var(--jab);font-size:0.7rem;">(you)</span></span>' +
-      '<span class="lb-score">' + scoreHtml(rows[me]) + '</span></div>';
-  }
-  return { html, rank: me, total: rows.length };
+}
+// Competition places for sorted rows (1, 1, 3): equal values share a place.
+function lbPlaces(rows, valueOf) {
+  const places = [];
+  rows.forEach((e, i) => places.push(i && valueOf(rows[i - 1]) === valueOf(e) ? places[i - 1] : i + 1));
+  return places;
+}
+// Top-5 rows plus, if you're further down, your own row with your rank.
+// `rows` must already be sorted (lbSort). Pass an empty myName to skip the
+// "(you)" highlight, e.g. for boards whose names aren't verified accounts.
+function lbRankedRows(rows, myName, valueOf, scoreHtml, detailHtml) {
+  const rl = ['gold','silver','bronze'];
+  const places = lbPlaces(rows, valueOf);
+  const me = myName ? rows.findIndex(e => (e.name || '').toLowerCase() === myName.toLowerCase()) : -1;
+  const line = (i, style) => {
+    const e = rows[i], mine = me === i;
+    return '<div class="lb-row"' + (mine ? ' style="background:var(--jab-tint);border-radius:6px;' + style + '"' : '') + '>' +
+      '<span class="lb-rank ' + (rl[places[i] - 1] || '') + '">' + places[i] + '</span>' +
+      '<span class="lb-name">' + esc(e.name) + (mine ? ' <span style="color:var(--jab);font-size:0.7rem;">(you)</span>' : '') + '</span>' +
+      (detailHtml ? '<span class="lb-detail">' + detailHtml(e) + '</span>' : '') +
+      '<span class="lb-score">' + scoreHtml(e) + '</span></div>';
+  };
+  let html = '';
+  rows.slice(0, 5).forEach((e, i) => { html += line(i, ''); });
+  if (me >= 5) html += line(me, 'margin-top:2px;');
+  return { html, rank: me, place: me >= 0 ? places[me] : -1, total: rows.length };
+}
+
+// "Oct 20" for a day number (days since 2024-01-01).
+function shortDayLabel(n) {
+  return new Date(2024, 0, 1 + n).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 function renderLeaderboardHtml(record, stale) {
@@ -3685,60 +3724,51 @@ function renderLeaderboardHtml(record, stale) {
   const myName = id ? id.handle : '';
   const p = accountProfile;
   if (id && p) {
-    html += '<div class="lb-you"><b>' + esc(p.name) + '</b> · 🔥 ' + esc(p.streak) + ' current · ' + esc(p.best) + ' best · ' + esc(p.weekWins) + '/7 this week</div>';
+    html += '<div class="lb-you"><b>' + esc(p.name) + '</b> · 🔥 ' + esc(p.streak) + ' current · ' + esc(p.best) + ' best · ' + esc(p.weekWins) + '/7 this week · ' + esc(p.wins || 0) + ' total wins</div>';
   } else if (!id) {
     html += '<div class="lb-you"><a href="#" onclick="focusSignIn();return false;" style="color:var(--jab-soft);">Sign in</a> and every Daily Jab lands on this board automatically.</div>';
   }
+  const players = record.dailyStreaks || [];
+  const weekWinsOf = e => e.wins || 0;
 
   // ── This week's top solvers (resets every week — fresh competition) ──
   const wk = (record.weekly && record.weekly.weekIndex === currentWeekIndex())
-    ? (record.weekly.entries || []).slice().sort((a, b) => (b.wins || 0) - (a.wins || 0))
+    ? lbSort(record.weekly.entries || [], weekWinsOf)
     : [];
   html += lbSection('🗓', "this week's top solvers", true);
   if (wk.length === 0) {
     html += '<div class="lb-empty" style="padding:0.5rem 0;">Fresh week — solve today\'s Daily Jab and be the first on the board!</div>';
   } else {
-    html += lbRankedRows(wk, myName, e => esc(e.wins) + '/7').html;
+    html += lbRankedRows(wk, myName, weekWinsOf, e => esc(e.wins) + '/7').html;
   }
 
-  // ── Streaks alive right now ──
-  const live = (record.dailyStreaks || []).filter(e => liveOf(e) > 0).sort((a, b) => liveOf(b) - liveOf(a));
+  // ── Streaks alive right now, with each player's best alongside ──
+  const live = lbSort(players.filter(e => liveOf(e) > 0), liveOf, bestOf);
   html += lbSection('🔥', 'streaks on fire');
   if (live.length === 0) {
     html += '<div class="lb-empty" style="padding:0.5rem 0;">No live streaks — win today\'s Daily Jab to start one!</div>';
   } else {
-    const r = lbRankedRows(live, myName, e => '🔥 ' + esc(liveOf(e)));
+    const r = lbRankedRows(live, myName, liveOf, e => '🔥 ' + esc(liveOf(e)), e => 'best ' + esc(bestOf(e)));
     html += r.html;
     if (r.rank >= 0) {
-      const pct = Math.max(1, Math.round(((r.rank + 1) / r.total) * 100));
-      html += '<div style="font-size:0.66rem;color:var(--muted);text-align:center;margin-top:3px;">You\'re #' + (r.rank + 1) + ' of ' + r.total + (r.rank >= 5 ? ' · top ' + pct + '%' : ' 🔥') + '</div>';
+      const pct = Math.max(1, Math.round((r.place / r.total) * 100));
+      html += '<div style="font-size:0.66rem;color:var(--muted);text-align:center;margin-top:3px;">You\'re #' + r.place + ' of ' + r.total + (r.place > 5 ? ' · top ' + pct + '%' : ' 🔥') + '</div>';
       html += '<div style="text-align:center;margin-top:6px;"><button class="btn-secondary btn-sm" style="font-size:0.72rem;" onclick="shareMyRank(this)">Share my rank</button></div>';
     }
   }
-
-  // ── All-time best streaks ──
-  const best = (record.dailyStreaks || []).filter(e => bestOf(e) > 0).sort((a, b) => bestOf(b) - bestOf(a));
-  html += lbSection('🏅', 'best streaks ever');
-  if (best.length === 0) {
-    html += '<div class="lb-empty" style="padding:0.5rem 0;">No streaks posted yet.</div>';
-  } else {
-    html += lbRankedRows(best, myName, e => '🔥 ' + esc(bestOf(e))).html;
+  const holder = lbSort(players.filter(e => bestOf(e) > 0), bestOf)[0];
+  if (holder) {
+    html += '<div style="font-size:0.66rem;color:var(--muted);text-align:center;margin-top:4px;">👑 Streak record: <b style="color:var(--muted-2);">' + esc(holder.name) + '</b> · ' + esc(bestOf(holder)) + '</div>';
   }
 
-  // Top scores
-  const topScores = record.topScores || [];
-  html += lbSection('🏆', 'top scores');
-  if (topScores.length === 0) {
-    html += '<div class="lb-empty" style="padding:0.5rem 0;">No scores yet.</div>';
+  // ── Lifetime Daily Jab wins ──
+  const total = lbSort(players.filter(e => winsOf(e) > 0), winsOf);
+  const since = record.totalsSince ? ' <span style="text-transform:none;letter-spacing:0;">· since ' + esc(shortDayLabel(record.totalsSince)) + '</span>' : '';
+  html += lbSection('🏅', 'total wins' + since);
+  if (total.length === 0) {
+    html += '<div class="lb-empty" style="padding:0.5rem 0;">Totals start counting with the next Daily Jab — win one to get on the board!</div>';
   } else {
-    const rankLabels = ['gold','silver','bronze'];
-    topScores.slice(0, 5).forEach((s, i) => {
-      const rl = rankLabels[i] || '';
-      html += '<div class="lb-row"><span class="lb-rank ' + rl + '">' + (i+1) + '</span>';
-      html += '<span class="lb-name">' + esc(s.name) + '</span>';
-      html += '<span class="lb-detail">' + (Array.isArray(s.players) ? s.players.length + 'p' : '') + '</span>';
-      html += '<span class="lb-score">' + esc(s.score) + ' pts</span></div>';
-    });
+    html += lbRankedRows(total, myName, winsOf, e => esc(winsOf(e)) + (winsOf(e) === 1 ? ' win' : ' wins')).html;
   }
 
   // Sponsored message between sections
@@ -3753,18 +3783,14 @@ function renderLeaderboardHtml(record, stale) {
     html += '</div></div>';
   }
 
-  // Longest games
-  const longest = record.longestGames || [];
-  html += lbSection('⏱', 'longest games');
-  if (longest.length === 0) {
-    html += '<div class="lb-empty" style="padding:0.5rem 0;">No games yet.</div>';
+  // Top scores (live Points games — typed names, so no "(you)" highlight)
+  const topScores = lbSort(record.topScores || [], s => s.score || 0);
+  html += lbSection('🏆', 'top scores');
+  if (topScores.length === 0) {
+    html += '<div class="lb-empty" style="padding:0.5rem 0;">No scores yet.</div>';
   } else {
-    longest.slice(0, 5).forEach((g, i) => {
-      html += '<div class="lb-row"><span class="lb-rank">' + (i+1) + '</span>';
-      html += '<span class="lb-name" style="color:' + safeColor(g.winnerColor) + '">' + esc(g.winner) + '</span>';
-      html += '<span class="lb-detail">' + (Array.isArray(g.players) ? g.players.length + 'p' : '') + '</span>';
-      html += '<span class="lb-score">' + esc(g.totalGuesses) + ' turns</span></div>';
-    });
+    html += lbRankedRows(topScores, '', s => s.score || 0, s => esc(s.score) + ' pts',
+      s => (Array.isArray(s.players) ? s.players.length + 'p' : '') + (s.rounds ? ' · ' + esc(s.rounds) + 'r' : '')).html;
   }
 
   return html;
@@ -3775,7 +3801,7 @@ function switchLbTab(tab) {
   document.querySelectorAll('.lb-panel').forEach(p => p.classList.remove('active'));
   document.querySelector('[onclick="switchLbTab(\'' + tab + '\')"]').classList.add('active');
   document.getElementById('lb-panel-' + tab).classList.add('active');
-  if (tab === 'shared') loadSharedLeaderboard();
+  loadSharedLeaderboard(); // feeds both tabs
 }
 
 function initLeaderboard() {
@@ -4487,12 +4513,12 @@ function copyToClipboard(text, btn, okLabel) {
 function shareMyRank(btn) {
   const cached = getCachedLeaderboard();
   const record = withMyEntry((cached && cached.record) || {});
-  const live = (record.dailyStreaks || []).filter(e => liveOf(e) > 0).sort((a, b) => liveOf(b) - liveOf(a));
+  const live = lbSort((record.dailyStreaks || []).filter(e => liveOf(e) > 0), liveOf, bestOf);
   const myName = getSavedPlayerName();
   const rank = myName ? live.findIndex(s => (s.name || '').toLowerCase() === myName.toLowerCase()) : -1;
   if (rank < 0) { if (btn) { const o = btn.textContent; btn.textContent = 'Win a Daily Jab first'; setTimeout(() => btn.textContent = o, 1500); } return; }
   const text = 'WordJab 🥊 Daily Streak board\n' +
-    "I'm #" + (rank + 1) + ' of ' + live.length + ' — 🔥 ' + liveOf(live[rank]) + ' streak!\n' +
+    "I'm #" + lbPlaces(live, liveOf)[rank] + ' of ' + live.length + ' — 🔥 ' + liveOf(live[rank]) + ' streak!\n' +
     'wordjab.io';
   copyToClipboard(text, btn, 'Copied!');
 }
