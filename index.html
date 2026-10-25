@@ -3168,7 +3168,7 @@ function enterRematchLobby() {
 let botMode = false, botTimer = null;
 
 function assignBotWord(p) {
-  const candidates = DAILY_WORDS.filter(w => w.length <= charCount);
+  const candidates = DAILY_WORDS.filter(w => w.length <= charCount && dailyPlayable(w));
   const word = candidates[Math.floor(Math.random() * candidates.length)].toLowerCase();
   const padded = word.padEnd(charCount, ' ');
   p.word = padded;
@@ -4044,12 +4044,24 @@ function buildWordOrder() {
   const rotation = interleaveHard(freshOrder.concat(staleOrder, extraOrder), DAILY_WORDS_HARD, 9003, 6, DAILY_WORDS_HARD_EXTRA);
   return ALREADY_SHOWN.concat(rotation);
 }
-const WORD_ORDER = buildWordOrder();
 // Sunday's own weekly-indexed cycle through the tougher pool — entirely
-// separate from WORD_ORDER above, so it never displaces a normal-rotation
+// separate from WORD_ORDER below, so it never displaces a normal-rotation
 // day; that day's regular word just lands on its next lap through the cycle.
-const SUNDAY_WORD_ORDER = shuffledOrder(9004, SUNDAY_HARD_WORDS.length).map(i => SUNDAY_HARD_WORDS[i])
+const SUNDAY_WORD_ORDER_V1 = shuffledOrder(9004, SUNDAY_HARD_WORDS.length).map(i => SUNDAY_HARD_WORDS[i])
   .concat(shuffledOrder(9104, SUNDAY_HARD_WORDS_EXTRA.length).map(i => SUNDAY_HARD_WORDS_EXTRA[i]));
+const WORD_ORDER_V1 = buildWordOrder();
+
+// Four-letter words played too tough, so from DAILY_MIN_LEN_FROM on they're
+// skipped. Filtered out of the already-built orders rather than deleted from
+// the lists above: deleting would change every list's length and so reshuffle
+// the whole schedule. Filtering keeps every other word in the same order (days
+// only shift forward, never repeating a recent word), and days before the
+// cutover keep the word they were actually served.
+const DAILY_MIN_LEN = 5;
+const DAILY_MIN_LEN_FROM = new Date(2026, 9, 27);
+const dailyPlayable = w => w.length >= DAILY_MIN_LEN;
+const WORD_ORDER = WORD_ORDER_V1.filter(dailyPlayable);
+const SUNDAY_WORD_ORDER = SUNDAY_WORD_ORDER_V1.filter(dailyPlayable);
 
 // Days whose word was already served before a later list fix replaced it
 // in place — pinned so everyone who played that day keeps seeing the word
@@ -4061,13 +4073,16 @@ function getDailyWord() {
   if (DAILY_WORD_PINS[dateStr(now)]) return DAILY_WORD_PINS[dateStr(now)];
   const start = new Date(WORD_SCHEDULE_START); start.setHours(0,0,0,0);
   const offset = Math.max(0, Math.floor((now - start) / 86400000));
+  const cut = new Date(DAILY_MIN_LEN_FROM); cut.setHours(0,0,0,0);
+  const weekdayOrder = now < cut ? WORD_ORDER_V1 : WORD_ORDER;
+  const sundayOrder = now < cut ? SUNDAY_WORD_ORDER_V1 : SUNDAY_WORD_ORDER;
   // Hard Word Sunday — player's local Sunday (matches this function's local-
   // day basis throughout), a separate weekly-indexed pool.
-  if (now.getDay() === 0 && SUNDAY_WORD_ORDER.length) {
+  if (now.getDay() === 0 && sundayOrder.length) {
     const sundayOffset = Math.floor(offset / 7);
-    return SUNDAY_WORD_ORDER[sundayOffset % SUNDAY_WORD_ORDER.length];
+    return sundayOrder[sundayOffset % sundayOrder.length];
   }
-  return WORD_ORDER[offset % WORD_ORDER.length];
+  return weekdayOrder[offset % weekdayOrder.length];
 }
 
 const DAILY_EPOCH = new Date(2024, 0, 1);
@@ -4252,13 +4267,13 @@ async function openDailyJab() {
   const state = getDailyState();
   const today = todayStr();
   if (state.lastPlayedDate === today) {
-    dailyIsHardSunday = SUNDAY_WORD_ORDER.includes(getDailyWord());
+    dailyIsHardSunday = SUNDAY_WORD_ORDER_V1.includes(getDailyWord());
     showDailyResultScreen(state.lastResult === 'win', getDailyWord(), state.lastRoundsLeft||0, state);
     return;
   }
   const word = getDailyWord();
   dailyPlayDate = today;
-  dailyIsHardSunday = SUNDAY_WORD_ORDER.includes(word);
+  dailyIsHardSunday = SUNDAY_WORD_ORDER_V1.includes(word);
   const saved = loadDailyProgress(today, word);
   const found = new Set(saved ? saved.found : []);
   dailyTiles = word.split('').map(ch => ({ char: ch, revealed: found.has(ch.toLowerCase()) }));
