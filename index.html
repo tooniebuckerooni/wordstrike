@@ -206,6 +206,12 @@
   /* Daily Jab corner hint — only surfaces on the last jab */
   .daily-hint { text-align: center; margin-top: 0.25rem; }
   .daily-hint:empty { display: none; }
+  /* Spot the doubles: hidden tiles of the same repeated letter share a glow color */
+  .tile.hidden.dbl { border-width: 2px; border-color: var(--dbl); background: color-mix(in srgb, var(--dbl) 22%, var(--surface-raised)); box-shadow: 0 0 10px color-mix(in srgb, var(--dbl) 55%, transparent); animation: hintFadeIn 0.5s ease both; }
+  .tile.dbl-0 { --dbl: #4fd1ff; }  /* no gold: that's the found-letter color */
+  .tile.dbl-1 { --dbl: #ff3d7a; }
+  .tile.dbl-2 { --dbl: #6ee7a0; }
+  .tile.dbl-3 { --dbl: #b18cff; }
   .hint-offer { animation: hintFadeIn 0.6s ease 0.4s both; }
   .hint-offer-title { font-size: 0.9rem; font-weight: 700; color: var(--jab-soft); margin-top: 0.2rem; }
   .hint-skip { font-size: 0.72rem; color: var(--muted-2); margin-top: 0.35rem; }
@@ -4150,19 +4156,33 @@ function dailyHiddenLetters() {
   return new Set(dailyTiles.filter(t => !t.revealed).map(t => t.char.toLowerCase()));
 }
 
+// Letters that appear more than once -> color group, in order of first
+// appearance across the whole word, so a pair keeps its color when another
+// pair is found. Only hidden tiles get lit (see renderDailyPlay); a letter's
+// tiles all reveal together, so its repeats are either all hidden or all found.
+function dailyDoubleGroups() {
+  const groups = {};
+  let n = 0;
+  dailyTiles.forEach(t => {
+    const l = t.char.toLowerCase();
+    if (!(l in groups) && dailyTiles.filter(x => x.char.toLowerCase() === l).length > 1) groups[l] = n++;
+  });
+  return groups;
+}
+
 function renderDailyHint() {
   const el = document.getElementById('daily-hint');
   if (!el) return;
   if (!DAILY_HINTS_ENABLED || (!dailyHintUsed && (dailyDone || dailyRoundsLeft !== 1))) { el.innerHTML = ''; return; }
   if (dailyHintUsed) {
-    el.innerHTML = '<div class="hint-msg">\u{1F5E3}\uFE0F ' + esc(dailyHintMsg) + '</div>';
+    el.innerHTML = !dailyHintMsg ? '' : '<div class="hint-msg">\u{1F5E3}\uFE0F ' + esc(dailyHintMsg) + '</div>';
     return;
   }
   el.innerHTML = '<div class="hint-offer">' +
     '<div class="hint-offer-title">\u{1F94A} Last jab! Your corner offers one hint:</div>' +
     '<div class="hint-angles">' +
       '<button class="btn-secondary btn-sm" onclick="useDailyHint(\'cut\')">Cut the ring<small>strike 3 dead letters</small></button>' +
-      '<button class="btn-secondary btn-sm" onclick="useDailyHint(\'doubles\')">Spot the doubles<small>any repeats still hiding</small></button>' +
+      '<button class="btn-secondary btn-sm" onclick="useDailyHint(\'doubles\')">Spot the doubles<small>light up repeat letters</small></button>' +
     '</div>' +
     '<div class="hint-skip">Or skip it and just throw.</div>' +
   '</div>';
@@ -4170,7 +4190,6 @@ function renderDailyHint() {
 
 function useDailyHint(angle) {
   if (dailyDone || dailyHintUsed || dailyRoundsLeft !== 1) return;
-  const hidden = dailyHiddenLetters();
   if (angle === 'cut') {
     const inWord = new Set(dailyTiles.map(t => t.char.toLowerCase()));
     const dead = 'abcdefghijklmnopqrstuvwxyz'.split('').filter(l => !inWord.has(l) && !dailyWrong.has(l));
@@ -4180,16 +4199,13 @@ function useDailyHint(angle) {
     cut.forEach(l => dailyHintCut.add(l));
     dailyHintMsg = 'Stay off ' + cut.map(l => l.toUpperCase()).join(', ') + ' — none of them are in there.';
   } else if (angle === 'doubles') {
-    // A letter's tiles all reveal together, so a hidden letter's repeats are all still hidden.
-    const repeats = [...hidden].map(l => dailyTiles.filter(t => t.char.toLowerCase() === l).length).filter(c => c > 1);
-    if (!repeats.length) dailyHintMsg = 'No doubles left — every hidden letter shows up just once.';
-    else if (repeats.length === 1) dailyHintMsg = 'One hidden letter lands ' + (repeats[0] === 2 ? 'twice' : repeats[0] + ' times') + '.';
-    else dailyHintMsg = repeats.length + ' hidden letters show up more than once.';
+    // The tiles do the talking (see renderDailyPlay); words only when there's nothing to light.
+    const groups = dailyDoubleGroups();
+    dailyHintMsg = [...dailyHiddenLetters()].some(l => l in groups) ? '' : 'No doubles left — every hidden letter shows up just once.';
   }
   dailyHintUsed = angle;
   saveDailyProgress();
-  renderDailyLetterGrid();
-  renderDailyHint();
+  renderDailyPlay();
 }
 
 function setFeedbackEl(id, msg, type) {
@@ -4278,9 +4294,12 @@ function renderDailyPlay() {
 
   const tilesEl = document.getElementById('daily-tiles');
   tilesEl.innerHTML = '';
+  const dbl = dailyHintUsed === 'doubles' ? dailyDoubleGroups() : {};
   dailyTiles.forEach(t => {
     const el = document.createElement('div');
     el.className = t.revealed ? 'tile revealed' : 'tile hidden';
+    const g = t.revealed ? undefined : dbl[t.char.toLowerCase()];
+    if (g !== undefined) { el.className += ' dbl dbl-' + (g % 4); el.setAttribute('aria-label', 'repeat group ' + (g + 1)); }
     el.textContent = t.revealed ? t.char.toUpperCase() : '?';
     tilesEl.appendChild(el);
   });
