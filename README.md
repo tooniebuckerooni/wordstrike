@@ -39,6 +39,9 @@ won/lost counts per day (signed-in players only).
 `HOLIDAYS` in `index.html` is a small date table: a line under the logo, a tint
 on the logo rule (`html[data-holiday="…"]` in the CSS), an emoji on the share
 text, and optionally an alternate glove (`#g-glove-santa` in the SVG sprite).
+A holiday with a glove also swaps the browser-tab icon, the Apple touch icon and
+the manifest (`site-holiday.webmanifest` → `*-holiday.png`); those PNGs are
+renders of the same artwork, so re-render them if the symbol changes.
 Each entry switches itself on and off by date. Pair it with a `DAILY_WORD_PINS`
 entry for an on-theme word.
 
