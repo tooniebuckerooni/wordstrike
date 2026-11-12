@@ -3,7 +3,7 @@
 // ============================================================================
 //
 // This is the complete script behind https://wordjab-api.dustinramsbottom.workers.dev,
-// serving GET /leaderboard and POST /register, /login, /me, /daily, /result,
+// serving GET /leaderboard, GET /daystats and POST /register, /login, /me, /daily, /result,
 // /recovery-set, /corr/*, plus a cron that rebuilds the streak board.
 // It's the merge of the original leaderboard/streak Worker with the additive
 // Correspondence module (worker/correspondence.js in this repo) — that file
@@ -17,6 +17,8 @@
 //                            id: records (see rebuildBoard), never the truth.
 //                            totalsSince is the first day a Daily Jab result
 //                            was counted into `wins` (the Total board's start).
+//   daystats             -> { <day>: { won, lost } } — signed-in Daily Jab
+//                            results per day, last 180 days (see bumpDayStat).
 //   id:<namelower>        -> { name, secret, secrets[], streak, best, lastDay,
 //                              lastResult, lastRoundsLeft, weekIndex, weekWins,
 //                              wins, played, recoverySalt, recoveryHash, createdTs }
@@ -563,6 +565,23 @@ async function loadLB(env) {
 }
 const saveLB = (env, d) => env.LEADERBOARD.put(LB_KEY, JSON.stringify(d));
 
+// Per-day Daily Jab tally: how many signed-in players won vs lost each day's
+// word. This is the real difficulty signal for tuning the word list (the
+// page's jabToughness() is only a model). Counts signed-in players only —
+// anonymous plays never reach the Worker. Read-modify-write on one KV key, so
+// two results landing in the same instant can lose one count; fine for a
+// rough solve rate, don't treat it as exact.
+const DAYSTATS_KEY = 'daystats';
+const DAYSTATS_KEEP_DAYS = 180;
+async function bumpDayStat(env, day, won) {
+  const d = (await env.LEADERBOARD.get(DAYSTATS_KEY, 'json')) || {};
+  const e = d[day] || { won: 0, lost: 0 };
+  if (won) e.won++; else e.lost++;
+  d[day] = e;
+  for (const k of Object.keys(d)) if (num(k) < day - DAYSTATS_KEEP_DAYS) delete d[k];
+  await env.LEADERBOARD.put(DAYSTATS_KEY, JSON.stringify(d));
+}
+
 // Compact copy of the fields the leaderboard needs, stored as KV metadata on
 // every id: record so the scheduled rebuild can read the whole player base
 // from `list()` alone, without a get() per player.
@@ -798,6 +817,20 @@ export default {
         return send(withLiveStreaks(data));
       }
 
+      // Solve rate per day, newest first: [{ day, date, won, lost, rate }].
+      // `date` is the players' local calendar day the word was served on.
+      if (url.pathname === '/daystats' && request.method === 'GET') {
+        const d = (await env.LEADERBOARD.get(DAYSTATS_KEY, 'json')) || {};
+        const days = Object.keys(d).map(num).sort((a, b) => b - a).map(day => {
+          const { won = 0, lost = 0 } = d[day] || {};
+          return {
+            day, date: new Date(EPOCH + day * 86400000).toISOString().slice(0, 10),
+            won, lost, rate: won + lost ? Math.round(won / (won + lost) * 100) : null,
+          };
+        });
+        return send({ ok: true, days });
+      }
+
       // Create a name, or sign in to one. Same endpoint for both so the
       // client has a single "name + password" form:
       //   - name free             -> claimed for this device (optionally with
@@ -943,6 +976,8 @@ export default {
           rec.lastResult = won ? 'win' : 'lose';
           rec.lastRoundsLeft = Math.max(0, Math.min(6, num(b.roundsLeft)));
           await saveId(env, nl, rec);
+          // Never let the tally get in the way of saving the result itself.
+          try { await bumpDayStat(env, today, won); } catch (e) {}
         }
         const data = await loadLB(env);
         let changed = upsertPlayer(data, rec, today);

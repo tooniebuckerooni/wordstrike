@@ -186,14 +186,24 @@
     border: 1.5px solid var(--line); background: transparent; color: var(--paper); font-weight: 600; transition: all 0.15s;
   }
   .target-btn.selected { border-color: var(--jab); background: var(--jab-tint); color: var(--jab-soft); }
-  .letter-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 1rem; }
+  /* QWERTY pad: 20 half-key columns so rows 2 and 3 can sit indented like a
+     phone keyboard (A starts half a key in, Z a key and a half in). */
+  .letter-grid { display: grid; grid-template-columns: repeat(20, 1fr); gap: 7px 5px; margin: 0 auto 1rem; max-width: 520px; }
   .letter-btn {
-    width: 40px; height: 40px; border-radius: 8px; font-size: 0.95rem; font-weight: 700;
-    cursor: pointer; border: 1.5px solid var(--line); background: transparent; color: var(--paper); transition: all 0.15s;
+    grid-column: span 2; height: 46px; min-width: 0; padding: 0; border-radius: 8px; font-size: 1.05rem; font-weight: 700;
+    font-family: inherit; cursor: pointer; border: 1.5px solid var(--line); background: var(--surface-raised); color: var(--paper);
+    transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.08s;
+    -webkit-tap-highlight-color: transparent; touch-action: manipulation;
   }
+  .letter-btn:nth-child(11) { grid-column: 2 / span 2; }
+  .letter-btn:nth-child(20) { grid-column: 4 / span 2; }
+  .letter-btn:not(:disabled):active { transform: scale(0.94); }
+  .letter-btn:not(:disabled):hover { border-color: var(--muted); }
+  .letter-grid .blank-btn { grid-column: 1 / -1; }
+  .letter-btn.used-correct:disabled { opacity: 1; }
   .letter-btn.selected { border-color: var(--jab); background: var(--jab-tint); color: var(--jab-soft); }
   .letter-btn.used-correct { background: var(--jab-tint-strong); border-color: var(--jab); color: var(--jab-soft); }
-  .letter-btn.used-wrong { background: var(--surface); border-color: var(--line); color: #534a6b; cursor: default; }
+  .letter-btn.used-wrong { background: transparent; border-color: transparent; color: #534a6b; cursor: default; }
   .blank-btn {
     padding: 0 12px; border-radius: 8px; height: 40px; font-size: 0.78rem;
     cursor: pointer; border: 1.5px solid var(--line); background: transparent; color: var(--paper); font-weight: 600; transition: all 0.15s;
@@ -240,6 +250,45 @@
   .word-input-row input { width: 100%; letter-spacing: 2px; font-size: 1.1rem; }
   .char-counter { font-size: 0.8rem; color: var(--muted); text-align: right; margin-top: 4px; }
   .char-counter.over { color: var(--hit-soft); }
+  /* Line icons (see the <svg> sprite at the top of <body>) */
+  .ico { width: 1.15em; height: 1.15em; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vertical-align: -0.2em; }
+  .glove { width: 1.2em; height: 1.2em; flex-shrink: 0; vertical-align: -0.25em; }
+  .home-h .ico, .home-h .glove { margin-right: 0.35em; }
+  /* Home: the four ways to play, as one compact 2x2 */
+  .mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+  .mode-tile {
+    display: flex; flex-direction: column; gap: 0.3rem; text-align: left; font-family: inherit; color: var(--paper);
+    background: var(--inset); border: 1.5px solid var(--line); border-radius: 12px; padding: 0.85rem 0.9rem;
+    cursor: pointer; transition: border-color 0.15s, background 0.15s, transform 0.08s; -webkit-tap-highlight-color: transparent;
+  }
+  .mode-tile:hover { border-color: var(--jab); background: var(--jab-tint); }
+  .mode-tile:active { transform: scale(0.98); }
+  .mode-tile .ico { width: 22px; height: 22px; color: var(--jab); }
+  .mode-tile b { font-size: 0.95rem; font-weight: 700; }
+  .mode-tile span { font-size: 0.75rem; color: var(--muted); line-height: 1.3; }
+  /* Home: sign-in folds down to one line until it's wanted */
+  #account-card { padding: 0.8rem 1.25rem; }
+  .acct-details > summary {
+    list-style: none; cursor: pointer; display: flex; align-items: center; gap: 0.5rem;
+    font-size: 0.85rem; font-weight: 600; color: var(--muted-2);
+  }
+  .acct-details > summary::-webkit-details-marker { display: none; }
+  .acct-details > summary .chev { margin-left: auto; color: var(--muted); transition: transform 0.15s; }
+  .acct-details[open] > summary .chev { transform: rotate(90deg); }
+  .acct-details[open] > summary { margin-bottom: 0.6rem; }
+  /* Daily Jab board: tiles grow to fill the row instead of sitting at 30px */
+  #daily-tiles, #daily-result-tiles { flex-wrap: nowrap; gap: 6px; margin-top: 0.9rem; }
+  #daily-tiles .tile, #daily-result-tiles .tile {
+    flex: 1 1 0; min-width: 0; max-width: 52px; width: auto; height: auto; aspect-ratio: 5 / 6;
+    border-radius: 8px; border-width: 1.5px; font-family: 'Archivo Black', sans-serif; font-size: clamp(1rem, 5vw, 1.5rem);
+  }
+  #daily-tiles .tile.hidden { border-bottom-width: 4px; }
+  #daily-tiles .tile.revealed, #daily-result-tiles .tile.revealed { background: var(--jab); color: var(--ink); border-color: var(--jab); }
+  /* Holiday nods (see HOLIDAYS in the script) */
+  html[data-holiday="xmas"] .logo-rule { width: 96px; height: 4px; background: repeating-linear-gradient(135deg, #e0162b 0 8px, #f4eef9 8px 16px); }
+  html[data-holiday="thanks"] .logo-rule { background: linear-gradient(90deg, transparent, #e8742c, var(--jab), #e8742c, transparent); width: 96px; }
+  html[data-holiday="newyear"] .logo-rule { background: linear-gradient(90deg, transparent, var(--jab), #f4eef9, var(--jab), transparent); width: 96px; }
+  html[data-holiday] .subtitle { color: var(--jab-soft); }
   .play-type-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1rem 0; }
   .play-type-card {
     background: var(--inset); border: 2px solid var(--line); border-radius: 12px;
@@ -435,7 +484,9 @@
   @media (max-width: 500px) {
     .mode-cards, .play-type-cards { grid-template-columns: 1fr; }
     .tile { width: 30px; height: 30px; font-size: 0.85rem; }
-    .letter-btn { width: 34px; height: 34px; font-size: 0.85rem; }
+    .letter-grid { gap: 7px 4px; }
+    .action-panel { padding: 1rem 0.6rem; }
+    .action-panel h3 { padding-left: 0.4rem; }
     .game-code-box .code { font-size: 2rem; letter-spacing: 6px; }
   }
 
@@ -473,13 +524,18 @@
 
   .daily-card {
     background: linear-gradient(135deg, var(--jab-tint), var(--surface) 60%);
-    border: 2px solid var(--jab); border-radius: 14px; padding: 1.1rem 1.25rem; margin-bottom: 1rem;
+    border: 2px solid var(--jab); border-radius: 16px; padding: 1.25rem 1.25rem; margin-bottom: 1rem;
     cursor: pointer; display: flex; align-items: center; gap: 1rem; transition: transform 0.15s;
+    box-shadow: 0 6px 28px rgba(255,182,39,0.12);
   }
+  .daily-card .dc-icon .glove { width: 54px; height: 54px; display: block; }
+  .daily-card .dc-kicker { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--jab); margin-bottom: 3px; }
+  .daily-card .dc-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+  .daily-card .dc-go { background: var(--jab); color: var(--ink); font-weight: 700; font-size: 0.85rem; padding: 0.45rem 0.9rem; border-radius: 999px; white-space: nowrap; }
   .daily-card:hover { transform: translateY(-1px); }
   .daily-card .dc-icon { font-size: 2.2rem; flex-shrink: 0; }
   .daily-card .dc-body { flex: 1; min-width: 0; }
-  .daily-card h3 { font-family: 'Anton', sans-serif; text-transform: uppercase; letter-spacing: 0.02em; font-size: 1.1rem; color: var(--paper); margin-bottom: 2px; }
+  .daily-card h3 { font-family: 'Anton', sans-serif; text-transform: uppercase; letter-spacing: 0.02em; font-size: 1.5rem; line-height: 1.05; color: var(--paper); margin-bottom: 2px; }
   .daily-card p { font-size: 0.78rem; color: var(--muted-2); }
   .daily-card .dc-flame { font-size: 0.8rem; font-weight: 700; color: var(--jab); white-space: nowrap; }
   .round-pips { display: flex; gap: 6px; justify-content: center; margin: 0.75rem 0; }
@@ -783,6 +839,66 @@
 
 <div id="conn-badge" role="status" aria-live="polite" style="display:none;position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:80;font-size:0.72rem;padding:4px 12px;border-radius:20px;text-transform:uppercase;letter-spacing:0.04em;font-weight:600;box-shadow:0 2px 10px rgba(0,0,0,0.4);"></div>
 
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></symbol>
+  <symbol id="i-bot" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 8V4M2 14h2M20 14h2M9 13v2M15 13v2"/><circle cx="12" cy="3" r="1"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5h13l3.5 7v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6z"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12 21 2M17 6l3 3M14 9l2 2"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-3.5 3.5-5.5 7-5.5s7 2 7 5.5M16 4.8a3.5 3.5 0 0 1 0 6.4M18.5 14.9c2 .8 3.5 2.4 3.5 5.1"/></symbol>
+  <!-- The WordJab glove. #g-glove-santa is the December version: fluffy fur
+       trim with holly over a studded, spiked leather cuff. applyHoliday()
+       swaps it in on the page; the tab and home-screen icons are the
+       *-holiday.png renders of this same artwork (re-render them if it changes). -->
+  <symbol id="g-glove" viewBox="0 0 64 64">
+    <path fill="#e0162b" d="M19 44C9 37 9 15 25 10c12-4 22 1 23 10 5 0 8 5 7 11-1 7-6 11-12 13v2H19z"/>
+    <path fill="none" stroke="#a80f1f" stroke-width="3.2" stroke-linecap="round" d="M40 19c5-1 8 2 8 6s-1 6-3 8"/>
+    <rect x="19" y="45" width="24" height="14" rx="2.5" fill="#c41226"/>
+    <rect x="19" y="45" width="24" height="3.5" fill="#a80f1f"/>
+    <rect x="24" y="51" width="14" height="5" rx="2.5" fill="#ffb627"/>
+  </symbol>
+  <symbol id="g-glove-santa" viewBox="0 0 64 64">
+    <polygon points="15.0,45.5 8.0,48.0 15.0,48.0" fill="#e3e6f0"/>
+    <polygon points="15.0,50.5 8.0,48.0 15.0,48.0" fill="#8f95ab"/>
+    <polygon points="15.0,51.5 8.0,54.0 15.0,54.0" fill="#e3e6f0"/>
+    <polygon points="15.0,56.5 8.0,54.0 15.0,54.0" fill="#8f95ab"/>
+    <polygon points="47.0,50.5 54.0,48.0 47.0,48.0" fill="#e3e6f0"/>
+    <polygon points="47.0,45.5 54.0,48.0 47.0,48.0" fill="#8f95ab"/>
+    <polygon points="47.0,56.5 54.0,54.0 47.0,54.0" fill="#e3e6f0"/>
+    <polygon points="47.0,51.5 54.0,54.0 47.0,54.0" fill="#8f95ab"/>
+    <path d="M19 44C9 37 9 15 25 10c12-4 22 1 23 10 5 0 8 5 7 11-1 7-6 11-12 13v2H19z" fill="#e0162b"/>
+    <path fill="none" stroke="#a80f1f" stroke-width="3.2" stroke-linecap="round" d="M40 19c5-1 8 2 8 6s-1 6-3 8"/>
+    <rect x="16" y="45" width="30" height="13" rx="2.5" fill="#1b1326"/>
+    <rect x="16" y="45" width="30" height="2" fill="#2e2440"/>
+    <polygon points="21,50.4 23.6,53 21,55.6 18.4,53" fill="#8f95ab"/>
+    <polygon points="21,50.4 23.6,53 21,53" fill="#e3e6f0"/>
+    <polygon points="18.4,53 21,50.4 21,53" fill="#fff"/>
+    <polygon points="41,50.4 43.6,53 41,55.6 38.4,53" fill="#8f95ab"/>
+    <polygon points="41,50.4 43.6,53 41,53" fill="#e3e6f0"/>
+    <polygon points="38.4,53 41,50.4 41,53" fill="#fff"/>
+    <rect x="25.5" y="48.5" width="11" height="9" rx="1.8" fill="#ffb627"/>
+    <rect x="28.5" y="51.5" width="5" height="3" rx=".8" fill="#1b1326"/>
+    <rect x="12" y="41" width="38" height="6" rx="3" fill="#f7f3fb"/>
+    <circle cx="13" cy="43.5" r="4.8" fill="#f7f3fb"/>
+    <circle cx="18.5" cy="43.5" r="4.8" fill="#f7f3fb"/>
+    <circle cx="24" cy="43.5" r="4.8" fill="#f7f3fb"/>
+    <circle cx="29.5" cy="43.5" r="4.8" fill="#f7f3fb"/>
+    <circle cx="35" cy="43.5" r="4.8" fill="#f7f3fb"/>
+    <circle cx="40.5" cy="43.5" r="4.8" fill="#f7f3fb"/>
+    <circle cx="46" cy="43.5" r="4.8" fill="#f7f3fb"/>
+    <path d="M15 47.3h32" stroke="#dcd3ea" stroke-width="1.6" stroke-linecap="round"/>
+    <g transform="translate(22 42)">
+    <path fill="#1f9d55" d="M0 0c-5-5-10-4-12-1 1 1 .5 2-.5 3 1.5 0 2.5 1 2.5 2.5 1.5-1 3-.5 4 1 .5-1.5 2-2.5 3.5-2 0-1.5 1-2.5 2.5-3.5z"/>
+    <path fill="#178047" d="M1 0c2-6 7-8 10-6-.5 1.5 0 2.5 1 3-1.5.5-2 1.5-1.5 3-1.5-.5-3 0-3.5 1.5-1-1-2.5-1.5-4-.5 0-1.5-.5-2.5-2-1z"/>
+    <circle cx="-1" cy="-1" r="2.3" fill="#ff3d5a"/>
+    <circle cx="2.5" cy=".8" r="2.3" fill="#ff5c75"/>
+    </g>
+  </symbol>
+</svg>
+
 <h1 class="wordjab-logo">
   <span class="logo-word">Word</span><span class="logo-jab">Jab</span>
 </h1>
@@ -795,10 +911,25 @@
 
 <!-- HOME -->
 <div id="screen-home" class="screen active">
-  <!-- 1. ACCOUNT — your streak lives on the server, tied to this sign-in -->
+  <!-- 1. DAILY JAB — first thing a new visitor can play, no setup -->
+  <div class="card daily-card" role="button" tabindex="0" aria-label="Daily Jab — one word, six jabs, today's fight" onclick="openDailyJab()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openDailyJab();}">
+    <div class="dc-icon" aria-hidden="true"><svg class="glove"><use href="#g-glove"/></svg></div>
+    <div class="dc-body">
+      <div class="dc-kicker" id="daily-card-kicker">Today's word</div>
+      <h3>Daily Jab</h3>
+      <p id="daily-card-sub">One word. Six jabs. Today's fight.</p>
+    </div>
+    <div class="dc-side">
+      <div class="dc-flame" id="daily-card-flame"></div>
+      <span class="dc-go" id="daily-card-go">Play</span>
+    </div>
+  </div>
+
+  <!-- 2. ACCOUNT — your streak lives on the server, tied to this sign-in -->
   <div class="card" id="account-card">
     <div id="account-out">
-      <h2 class="home-h">👤 Sign in</h2>
+     <details class="acct-details" id="acct-details">
+      <summary><svg class="ico" aria-hidden="true"><use href="#i-user"/></svg>Sign in to save your streak<svg class="ico chev" aria-hidden="true"><use href="#i-chev"/></svg></summary>
       <p class="home-p">Pick a fight name and password to keep your Daily Jab streak on every device — even if your phone clears its data. Already have a name? Same form signs you back in.</p>
       <form class="acct-form" onsubmit="accountSubmit('acct');return false;">
         <input type="text" id="acct-name" placeholder="fight name" maxlength="16" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false">
@@ -815,10 +946,11 @@
         </div>
         <div id="acct-key-msg" class="acct-msg" aria-live="polite"></div>
       </div>
+     </details>
     </div>
     <div id="account-in" style="display:none;">
       <div class="acct-row">
-        <span aria-hidden="true">🥊</span> <b id="acct-you"></b>
+        <svg class="glove" aria-hidden="true"><use href="#g-glove"/></svg> <b id="acct-you"></b>
         <span id="acct-streak" class="acct-streak"></span>
         <a href="#" class="acct-link" style="margin-left:auto;" onclick="signOut();return false;">sign out</a>
       </div>
@@ -835,7 +967,7 @@
     </div>
   </div>
 
-  <!-- 2. INVITES — anything waiting on you -->
+  <!-- 3. INVITES — anything waiting on you -->
   <div class="card" id="resume-card" style="display:none;border-color:var(--jab);">
     <div style="font-weight:700;margin-bottom:0.25rem;">🔄 Game in progress</div>
     <p id="resume-card-text" style="color:var(--muted);font-size:0.85rem;margin-bottom:0.75rem;"></p>
@@ -846,59 +978,45 @@
   </div>
   <div class="card" id="corr-card">
     <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:0.3rem;flex-wrap:wrap;">
-      <h2 class="home-h" style="margin:0;">📬 Invites &amp; your games</h2>
+      <h2 class="home-h" style="margin:0;"><svg class="ico" aria-hidden="true"><use href="#i-inbox"/></svg>Invites &amp; your games</h2>
       <span id="corr-turn-badge" style="font-size:0.72rem;color:var(--jab-soft);font-weight:600;"></span>
     </div>
     <div id="corr-list" aria-live="polite" style="margin-top:0.5rem;"></div>
     <p id="games-empty" class="home-p" style="margin:0.25rem 0 0;">No games waiting on you. Got a code from a friend? Jump in:</p>
     <div class="btn-row" style="margin-top:0.6rem;">
-      <button class="btn-secondary btn-sm" onclick="showScreen('screen-join')" style="flex:1;">🔑 Join live game</button>
-      <button class="btn-secondary btn-sm" onclick="openCorrJoin()" style="flex:1;">✉️ Join mail match</button>
+      <button class="btn-secondary btn-sm" onclick="showScreen('screen-join')" style="flex:1;"><svg class="ico" aria-hidden="true"><use href="#i-key"/></svg> Join live game</button>
+      <button class="btn-secondary btn-sm" onclick="openCorrJoin()" style="flex:1;"><svg class="ico" aria-hidden="true"><use href="#i-mail"/></svg> Join mail match</button>
     </div>
   </div>
 
-  <!-- 3. START A GAME WITH FRIENDS -->
+  <!-- 4. PLAY — the four ways to start a match -->
   <div class="card">
-    <h2 class="home-h">🌐 Start a game with friends</h2>
-    <div class="play-type-cards" style="margin-bottom:0.75rem;">
-      <div class="play-type-card" role="button" tabindex="0" aria-label="Host live — get a 4-letter code to share" onclick="showScreen('screen-online-setup')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showScreen('screen-online-setup');}">
-        <div class="icon" aria-hidden="true">⚡</div>
-        <h3>Host live</h3>
-        <p>Everyone online now. Get a 4-letter code to share.</p>
-      </div>
-      <div class="play-type-card" role="button" tabindex="0" aria-label="Play by mail — turn-by-turn match friends can answer any time" onclick="openCorrNew()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openCorrNew();}">
-        <div class="icon" aria-hidden="true">📮</div>
-        <h3>Play by mail</h3>
-        <p>Turn-by-turn. Move, close the app, come back when it's your turn.</p>
-      </div>
-    </div>
-    <div class="play-type-card" role="button" tabindex="0" aria-label="Same Device — everyone plays on one screen, pass and play" onclick="chooseLocal()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();chooseLocal();}">
-      <div class="icon" aria-hidden="true">🖥️</div>
-      <h3>Same device</h3>
-      <p>Everyone plays on one screen. Pass and play.</p>
-    </div>
-  </div>
-
-  <!-- 4. SPAR WITH THE BOT -->
-  <div class="card">
-    <div class="play-type-card" role="button" tabindex="0" aria-label="Spar with the bot — no friends around? Spar solo" onclick="startBotGame()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();startBotGame();}">
-      <div class="icon" aria-hidden="true">🤖</div>
-      <h3>Spar with the bot</h3>
-      <p>No friends around? Go a round against JabBot.</p>
+    <h2 class="home-h"><svg class="ico" aria-hidden="true"><use href="#i-users"/></svg>Start a match</h2>
+    <div class="mode-grid">
+      <button type="button" class="mode-tile" aria-label="Host live — get a 4-letter code to share" onclick="showScreen('screen-online-setup')">
+        <svg class="ico" aria-hidden="true"><use href="#i-bolt"/></svg>
+        <b>Host live</b>
+        <span>Everyone online now. Share a 4-letter code.</span>
+      </button>
+      <button type="button" class="mode-tile" aria-label="Play by mail — turn-by-turn match friends can answer any time" onclick="openCorrNew()">
+        <svg class="ico" aria-hidden="true"><use href="#i-mail"/></svg>
+        <b>Play by mail</b>
+        <span>Turn-by-turn. Come back when it&rsquo;s your move.</span>
+      </button>
+      <button type="button" class="mode-tile" aria-label="Same device — everyone plays on one screen, pass and play" onclick="chooseLocal()">
+        <svg class="ico" aria-hidden="true"><use href="#i-phone"/></svg>
+        <b>Same device</b>
+        <span>One screen. Pass and play.</span>
+      </button>
+      <button type="button" class="mode-tile" aria-label="Spar with the bot — no friends around? Spar solo" onclick="startBotGame()">
+        <svg class="ico" aria-hidden="true"><use href="#i-bot"/></svg>
+        <b>Spar with the bot</b>
+        <span>No friends around? Take on JabBot.</span>
+      </button>
     </div>
   </div>
 
-  <!-- 5. DAILY JAB -->
-  <div class="card daily-card" role="button" tabindex="0" aria-label="Daily Jab — one word, six rounds, today's fight" onclick="openDailyJab()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openDailyJab();}">
-    <div class="dc-icon" aria-hidden="true">🥊</div>
-    <div class="dc-body">
-      <h3>Daily Jab</h3>
-      <p id="daily-card-sub">One word. Six rounds. Today's fight.</p>
-    </div>
-    <div class="dc-flame" id="daily-card-flame"></div>
-  </div>
-
-  <!-- 6. LEADERBOARD -->
+  <!-- 5. LEADERBOARD -->
   <div class="card" id="leaderboard-card" style="padding-bottom:0.75rem;">
     <div class="lb-tabs">
       <button class="lb-tab active" onclick="switchLbTab('shared')">Leaderboard</button>
@@ -914,7 +1032,7 @@
 
   <div class="card" id="lounge-card">
     <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:0.3rem;">
-      <h2 class="home-h" style="margin:0;">🥊 The Lounge</h2>
+      <h2 class="home-h" style="margin:0;"><svg class="glove" aria-hidden="true"><use href="#g-glove"/></svg>The Lounge</h2>
       <span id="lounge-count-badge" style="font-size:0.72rem;color:var(--jab-soft);font-weight:600;"></span>
     </div>
     <p style="font-size:0.78rem;color:var(--muted);margin-bottom:0.75rem;">Meet other players. Step in, see who's around, and challenge anyone to a live match.</p>
@@ -2603,7 +2721,7 @@ function renderTargets() {
 function renderLetterGrid() {
   const lg = document.getElementById('letters');
   lg.innerHTML = '';
-  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  const letters = 'QWERTYUIOPASDFGHJKLZXCVBNM'.split('');
   let correct = new Set(), wrong = new Set();
   if (selectedTarget !== null) {
     const t = players[selectedTarget];
@@ -4061,12 +4179,55 @@ const DAILY_MIN_LEN = 5;
 const DAILY_MIN_LEN_FROM = new Date(2026, 9, 27);
 const dailyPlayable = w => w.length >= DAILY_MIN_LEN;
 const WORD_ORDER = WORD_ORDER_V1.filter(dailyPlayable);
-const SUNDAY_WORD_ORDER = SUNDAY_WORD_ORDER_V1.filter(dailyPlayable);
+
+// Easier weekdays (from DAILY_EASE_FROM). Two things made regular days play
+// meaner than intended: J/Q/X/Z words in the weekday rotation (that's Hard
+// Word Sunday's whole theme — ZIPPER on a Tuesday took out most streaks), and
+// a tail of words built almost entirely from letters people guess last
+// (KICKBACK, WIGWAM, KAYAK…). Both are now kept off Monday–Saturday.
+//
+// jabToughness() is a rough stand-in for a typical player: guess letters in
+// the usual vowels-then-common-consonants order and count the misses taken
+// before three quarters of the tiles are showing. It's a ranking tool, not a
+// solve-rate — the Worker's per-day tally (GET /daystats) is the real number.
+// Weekday words must score under DAILY_EASE_MAX; raise it to toughen weekdays,
+// lower it to ease them further (use a new cutover date either way).
+//
+// Same filter-don't-delete approach as the four-letter cutoff above, for the
+// same reason: every remaining word keeps its relative order, days only skip
+// forward, and days already played keep the word they were served.
+const JAB_GUESS_ORDER = 'EAIOTNSRULDCHMPGBFYWKVXZJQ';
+function jabToughness(w) {
+  const need = w.length * 0.75;
+  let miss = 0, shown = 0;
+  for (const c of JAB_GUESS_ORDER) {
+    const n = w.split(c).length - 1;
+    if (n) { shown += n; if (shown >= need) return miss; } else miss++;
+  }
+  return miss;
+}
+const DAILY_EASE_FROM = new Date(2026, 10, 16);
+const DAILY_EASE_MAX = 13;
+const sundayOnly = w => /[JQXZ]/.test(w);
+const dailyGentle = w => !sundayOnly(w) && jabToughness(w) < DAILY_EASE_MAX;
+const WORD_ORDER_EASED = WORD_ORDER.filter(dailyGentle);
+// The J/Q/X/Z words taken off weekdays aren't lost — they join the END of the
+// Sunday cycle, so no Sunday already scheduled changes.
+const SUNDAY_WORD_ORDER = (base => base.concat([...new Set(WORD_ORDER.filter(sundayOnly))].filter(w => !base.includes(w))))(
+  SUNDAY_WORD_ORDER_V1.filter(dailyPlayable));
 
 // Days whose word was already served before a later list fix replaced it
 // in place — pinned so everyone who played that day keeps seeing the word
 // they actually played.
-const DAILY_WORD_PINS = { '2026-10-03': 'LEFTHOOK' };
+const DAILY_WORD_PINS = {
+  '2026-10-03': 'LEFTHOOK',
+  // Holiday nods — an on-theme word on the day itself (see HOLIDAYS below,
+  // which tells players the word is on theme). None of these are Sundays.
+  '2026-11-26': 'TURKEY',     // US Thanksgiving
+  '2026-12-24': 'MISTLETOE',
+  '2026-12-25': 'REINDEER',
+  '2026-12-31': 'CONFETTI',
+};
 
 function getDailyWord() {
   const now = new Date(); now.setHours(0,0,0,0);
@@ -4074,7 +4235,8 @@ function getDailyWord() {
   const start = new Date(WORD_SCHEDULE_START); start.setHours(0,0,0,0);
   const offset = Math.max(0, Math.floor((now - start) / 86400000));
   const cut = new Date(DAILY_MIN_LEN_FROM); cut.setHours(0,0,0,0);
-  const weekdayOrder = now < cut ? WORD_ORDER_V1 : WORD_ORDER;
+  const ease = new Date(DAILY_EASE_FROM); ease.setHours(0,0,0,0);
+  const weekdayOrder = now < cut ? WORD_ORDER_V1 : (now < ease ? WORD_ORDER : WORD_ORDER_EASED);
   const sundayOrder = now < cut ? SUNDAY_WORD_ORDER_V1 : SUNDAY_WORD_ORDER;
   // Hard Word Sunday — player's local Sunday (matches this function's local-
   // day basis throughout), a separate weekly-indexed pool.
@@ -4229,10 +4391,65 @@ function setFeedbackEl(id, msg, type) {
   el.textContent = msg; el.className = 'feedback ' + type;
 }
 
+// ── Holiday nods ─────────────────────────────────────────────────────────────
+// Small, date-driven and self-expiring: a line under the logo, a tint on the
+// logo rule, an emoji on the share text, and (December) the holiday glove —
+// on the page, the browser tab and the home-screen icon.
+// Dates are MM-DD in the player's local time, inclusive; `to` may wrap past
+// New Year. `word` is the Daily Jab line shown on days whose word is pinned
+// on theme (DAILY_WORD_PINS). To add one: add a row here, and a
+// html[data-holiday="…"] rule in the CSS if it wants its own tint.
+const HOLIDAYS = [
+  { key: 'thanks',  from: '11-26', to: '11-26', tag: 'happy thanksgiving', share: '\u{1F983}', word: 'Happy Thanksgiving — today’s word belongs on the table.' },
+  { key: 'xmas',    from: '12-18', to: '12-26', tag: 'happy holidays',     share: '\u{1F384}', word: 'Happy holidays — today’s word is a festive one.', glove: 'g-glove-santa' },
+  { key: 'newyear', from: '12-31', to: '01-01', tag: 'happy new year',     share: '\u{1F389}', word: 'Last jab of the year — today’s word is a party.' },
+];
+function currentHoliday() {
+  const md = todayStr().slice(5);
+  return HOLIDAYS.find(h => h.from <= h.to ? (md >= h.from && md <= h.to) : (md >= h.from || md <= h.to)) || null;
+}
+let _holidayApplied;
+function applyHoliday() {
+  const h = currentHoliday();
+  const key = h ? h.key : '';
+  if (key === _holidayApplied) return;
+  _holidayApplied = key;
+  if (key) document.documentElement.dataset.holiday = key; else delete document.documentElement.dataset.holiday;
+  const sub = document.querySelector('.subtitle');
+  if (sub) sub.innerHTML = h ? h.tag : 'guess &middot; jab &middot; win';
+  const glove = '#' + ((h && h.glove) || 'g-glove');
+  document.querySelectorAll('svg.glove use').forEach(u => u.setAttribute('href', glove));
+  // Tab + home-screen icons follow the holiday glove. Each link remembers its
+  // normal href so the swap undoes itself when the dates pass. (Phones that
+  // already have WordJab on the home screen keep whatever icon they saved.)
+  const seasonal = !!(h && h.glove);
+  const sym = seasonal && document.getElementById(h.glove);
+  const swaps = {
+    'link[rel="icon"][href^="data:"]': sym ? 'data:image/svg+xml,' + encodeURIComponent(
+      "<svg xmlns='http://www.w3.org/2000/svg' viewBox='-8 -7 80 80'><rect x='-8' y='-7' width='80' height='80' rx='16' fill='#150f22'/>" + sym.innerHTML + '</svg>') : null,
+    'link[rel="icon"][sizes="32x32"]': '/favicon-32-holiday.png',
+    'link[rel="apple-touch-icon"]': '/apple-touch-icon-holiday.png',
+    'link[rel="manifest"]': '/site-holiday.webmanifest',
+  };
+  Object.keys(swaps).forEach(sel => {
+    const el = document.querySelector(sel);
+    if (!el) return;
+    if (!el.dataset.normalHref) el.dataset.normalHref = el.getAttribute('href');
+    el.setAttribute('href', seasonal && swaps[sel] ? swaps[sel] : el.dataset.normalHref);
+  });
+}
+
 function renderDailyHomeBadge() {
+  applyHoliday();
   const flameEl = document.getElementById('daily-card-flame');
   const subEl = document.getElementById('daily-card-sub');
   if (!flameEl || !subEl) return;
+  const goEl = document.getElementById('daily-card-go');
+  const kickEl = document.getElementById('daily-card-kicker');
+  const holiday = currentHoliday();
+  const doneToday = getDailyState().lastPlayedDate === todayStr();
+  if (goEl) goEl.textContent = doneToday ? 'Result' : (loadDailyProgress(todayStr(), getDailyWord()) ? 'Resume' : 'Play');
+  if (kickEl) kickEl.textContent = 'Daily #' + dailyDayNumber();
   const state = getDailyState();
   const live = liveLocalStreak(state);
   flameEl.textContent = live > 0 ? ('\u{1F525} ' + live) : '';
@@ -4243,10 +4460,12 @@ function renderDailyHomeBadge() {
     subEl.textContent = 'Round in progress — ' + p.roundsLeft + ' jab' + (p.roundsLeft === 1 ? '' : 's') + ' left. Finish the fight.';
   } else if (!storageWorks() && !getIdentity()) {
     subEl.textContent = "This browser isn't saving data between visits — sign in above so your streak is kept for you.";
+  } else if (holiday && holiday.word && DAILY_WORD_PINS[todayStr()]) {
+    subEl.textContent = holiday.share + ' ' + holiday.word;
   } else if (new Date().getDay() === 0) {
     subEl.textContent = '💥 Hard Word Sunday — today’s jab is tougher than usual.';
   } else {
-    subEl.textContent = 'One word. Six rounds. Today’s fight.';
+    subEl.textContent = 'One word. Six jabs. Today’s fight.';
   }
 }
 
@@ -4267,13 +4486,13 @@ async function openDailyJab() {
   const state = getDailyState();
   const today = todayStr();
   if (state.lastPlayedDate === today) {
-    dailyIsHardSunday = SUNDAY_WORD_ORDER_V1.includes(getDailyWord());
+    dailyIsHardSunday = new Date().getDay() === 0 && !DAILY_WORD_PINS[today];
     showDailyResultScreen(state.lastResult === 'win', getDailyWord(), state.lastRoundsLeft||0, state);
     return;
   }
   const word = getDailyWord();
   dailyPlayDate = today;
-  dailyIsHardSunday = SUNDAY_WORD_ORDER_V1.includes(word);
+  dailyIsHardSunday = new Date().getDay() === 0 && !DAILY_WORD_PINS[today];
   const saved = loadDailyProgress(today, word);
   const found = new Set(saved ? saved.found : []);
   dailyTiles = word.split('').map(ch => ({ char: ch, revealed: found.has(ch.toLowerCase()) }));
@@ -4326,7 +4545,7 @@ function renderDailyPlay() {
 function renderDailyLetterGrid() {
   const lg = document.getElementById('daily-letters');
   lg.innerHTML = '';
-  'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').forEach(l => {
+  'QWERTYUIOPASDFGHJKLZXCVBNM'.split('').forEach(l => {
     const lo = l.toLowerCase();
     const correct = dailyTiles.some(t => t.char.toLowerCase()===lo && t.revealed);
     const wrong = dailyWrong.has(lo);
@@ -4515,7 +4734,8 @@ function shareDailyResult() {
   const greenSquares = won ? roundsLeft : 0;
   const redSquares = DAILY_ROUNDS - greenSquares;
   const squares = '\u{1F7E9}'.repeat(greenSquares) + '\u{1F7E5}'.repeat(redSquares);
-  const text = 'WordJab Daily #' + dailyDayNumber() + '\n' +
+  const holiday = currentHoliday();
+  const text = 'WordJab Daily #' + dailyDayNumber() + (holiday ? ' ' + holiday.share : '') + '\n' +
     (won ? 'Cracked it \u{1F3C6}' : 'Down for the count \u{1F94A}') + '\n' +
     squares + (hint ? ' \u{1F5E3}\uFE0F' : '') + '\n' +
     '\u{1F525} ' + streak + ' streak\n' +
@@ -4869,7 +5089,10 @@ function renderAccountCard() {
   if (!signedIn) {
     const nameEl = document.getElementById('acct-name');
     if (nameEl && !nameEl.value && id) nameEl.value = id.handle;
-    if (accountAuthLost && id) setMsg('acct-msg', 'Sign in again to keep saving your streak to ' + id.handle + '.', 'err');
+    if (accountAuthLost && id) {
+      setMsg('acct-msg', 'Sign in again to keep saving your streak to ' + id.handle + '.', 'err');
+      const fold = document.getElementById('acct-details'); if (fold) fold.open = true;
+    }
     return;
   }
   document.getElementById('acct-you').textContent = id.handle;
@@ -4894,6 +5117,7 @@ function renderAccountCard() {
 function focusSignIn() {
   showScreen('screen-home');
   const card = document.getElementById('account-card');
+  const fold = document.getElementById('acct-details'); if (fold) fold.open = true;
   if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
   setTimeout(() => { const n = document.getElementById('acct-name'); if (n) n.focus(); }, 300);
 }
@@ -5843,7 +6067,7 @@ function renderCorrLetters(target) {
   const canPlay = corrGame && corrGame.phase === 'active' && corrGame.yourTurn && target && !target.eliminated;
   const tiles = (target && target.tiles) || [];
   const wrong = (target && target.wrong) || [];
-  'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').forEach(l => {
+  'QWERTYUIOPASDFGHJKLZXCVBNM'.split('').forEach(l => {
     const lo = l.toLowerCase();
     const correct = tiles.some(t => t.revealed && t.char && t.char.toLowerCase() === lo);
     const miss = wrong.includes(lo) && !correct;
