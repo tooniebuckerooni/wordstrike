@@ -43,7 +43,7 @@ A holiday with `glove` and `icons` also swaps the browser-tab icon, the Apple
 touch icon and the manifest, using the `icons` suffix (`site-<icons>.webmanifest`,
 `favicon-32-<icons>.png`, `apple-touch-icon-<icons>.png`, `icon-192/512-<icons>.png`).
 Those PNGs are renders of the sprite symbol, so re-render them if it changes.
-Current sets: `thanks` (a plain turkey, `#g-turkey` — no glove) and `holiday` (holly glove).
+Current sets: `thanks` (a plain turkey with a small striped football, `#g-turkey` — no glove) and `holiday` (holly glove).
 Each entry switches itself on and off by date. Pair it with a `DAILY_WORD_PINS`
 entry for an on-theme word.
 
