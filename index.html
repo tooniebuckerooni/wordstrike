@@ -860,6 +860,50 @@
     <rect x="19" y="45" width="24" height="3.5" fill="#a80f1f"/>
     <rect x="24" y="51" width="14" height="5" rx="2.5" fill="#ffb627"/>
   </symbol>
+  <symbol id="g-glove-turkey" viewBox="0 0 64 64">
+    <g transform="rotate(-66 28 36)">
+    <ellipse cx="28" cy="13" rx="6.2" ry="13" fill="#8a4b22"/>
+    <ellipse cx="28" cy="9" rx="3.4" ry="6.5" fill="#b9854a"/>
+    </g>
+    <g transform="rotate(-44 28 36)">
+    <ellipse cx="28" cy="13" rx="6.2" ry="13" fill="#e8742c"/>
+    <ellipse cx="28" cy="9" rx="3.4" ry="6.5" fill="#ffb627"/>
+    </g>
+    <g transform="rotate(-22 28 36)">
+    <ellipse cx="28" cy="13" rx="6.2" ry="13" fill="#8a4b22"/>
+    <ellipse cx="28" cy="9" rx="3.4" ry="6.5" fill="#b9854a"/>
+    </g>
+    <g transform="rotate(0 28 36)">
+    <ellipse cx="28" cy="13" rx="6.2" ry="13" fill="#e8742c"/>
+    <ellipse cx="28" cy="9" rx="3.4" ry="6.5" fill="#ffb627"/>
+    </g>
+    <g transform="rotate(22 28 36)">
+    <ellipse cx="28" cy="13" rx="6.2" ry="13" fill="#8a4b22"/>
+    <ellipse cx="28" cy="9" rx="3.4" ry="6.5" fill="#b9854a"/>
+    </g>
+    <g transform="rotate(44 28 36)">
+    <ellipse cx="28" cy="13" rx="6.2" ry="13" fill="#e8742c"/>
+    <ellipse cx="28" cy="9" rx="3.4" ry="6.5" fill="#ffb627"/>
+    </g>
+    <g transform="rotate(66 28 36)">
+    <ellipse cx="28" cy="13" rx="6.2" ry="13" fill="#8a4b22"/>
+    <ellipse cx="28" cy="9" rx="3.4" ry="6.5" fill="#b9854a"/>
+    </g>
+    <path fill="#e0162b" d="M19 44C9 37 9 15 25 10c12-4 22 1 23 10 5 0 8 5 7 11-1 7-6 11-12 13v2H19z"/>
+    <path fill="none" stroke="#a80f1f" stroke-width="3.2" stroke-linecap="round" d="M40 19c5-1 8 2 8 6s-1 6-3 8"/>
+    <rect x="19" y="45" width="24" height="14" rx="2.5" fill="#c41226"/>
+    <rect x="19" y="45" width="24" height="3.5" fill="#a80f1f"/>
+    <rect x="24" y="51" width="14" height="5" rx="2.5" fill="#ffb627"/>
+    <circle cx="36" cy="24" r="3.4" fill="#f7f3fb"/>
+    <circle cx="36.8" cy="24.3" r="1.7" fill="#1b1326"/>
+    <path fill="#ffb627" d="M41 27.5l8.5 2.800-8.5 2.700z"/>
+    <path fill="#a80f1f" d="M41.5 32.5c2.800 0 3.800 2.5 3 5.5-.5 1.800-2.600 1.800-3.200.2-.6-1.800-.6-3.900.2-5.700z"/>
+    <g transform="rotate(-28 15 52)">
+    <ellipse cx="15" cy="52" rx="11" ry="6.6" fill="#8a4b22"/>
+    <path d="M6.5 48.300c1.300 2.300 1.300 5.100 0 7.400M23.5 48.300c-1.300 2.300-1.300 5.100 0 7.400" fill="none" stroke="#f7f3fb" stroke-width="1.5"/>
+    <path d="M11 52h8M12.5 50.300v3.400M15 50.300v3.400M17.5 50.300v3.400" stroke="#f7f3fb" stroke-width="1.300" stroke-linecap="round"/>
+    </g>
+  </symbol>
   <symbol id="g-glove-santa" viewBox="0 0 64 64">
     <polygon points="15.0,45.5 8.0,48.0 15.0,48.0" fill="#e3e6f0"/>
     <polygon points="15.0,50.5 8.0,48.0 15.0,48.0" fill="#8f95ab"/>
@@ -911,21 +955,7 @@
 
 <!-- HOME -->
 <div id="screen-home" class="screen active">
-  <!-- 1. DAILY JAB — first thing a new visitor can play, no setup -->
-  <div class="card daily-card" role="button" tabindex="0" aria-label="Daily Jab — one word, six jabs, today's fight" onclick="openDailyJab()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openDailyJab();}">
-    <div class="dc-icon" aria-hidden="true"><svg class="glove"><use href="#g-glove"/></svg></div>
-    <div class="dc-body">
-      <div class="dc-kicker" id="daily-card-kicker">Today's word</div>
-      <h3>Daily Jab</h3>
-      <p id="daily-card-sub">One word. Six jabs. Today's fight.</p>
-    </div>
-    <div class="dc-side">
-      <div class="dc-flame" id="daily-card-flame"></div>
-      <span class="dc-go" id="daily-card-go">Play</span>
-    </div>
-  </div>
-
-  <!-- 2. ACCOUNT — your streak lives on the server, tied to this sign-in -->
+  <!-- 1. ACCOUNT — your streak lives on the server, tied to this sign-in -->
   <div class="card" id="account-card">
     <div id="account-out">
      <details class="acct-details" id="acct-details">
@@ -964,6 +994,20 @@
         <div id="acct-setpw-msg" class="acct-msg" aria-live="polite"></div>
       </div>
       <div style="text-align:right;margin-top:2px;" id="acct-changepw-wrap"><a href="#" class="acct-link" onclick="toggleRecoverPanel('acct-setpw');return false;">change password</a></div>
+    </div>
+  </div>
+
+  <!-- 2. DAILY JAB — playable with no setup -->
+  <div class="card daily-card" role="button" tabindex="0" aria-label="Daily Jab — one word, six jabs, today's fight" onclick="openDailyJab()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openDailyJab();}">
+    <div class="dc-icon" aria-hidden="true"><svg class="glove"><use href="#g-glove"/></svg></div>
+    <div class="dc-body">
+      <div class="dc-kicker" id="daily-card-kicker">Today's word</div>
+      <h3>Daily Jab</h3>
+      <p id="daily-card-sub">One word. Six jabs. Today's fight.</p>
+    </div>
+    <div class="dc-side">
+      <div class="dc-flame" id="daily-card-flame"></div>
+      <span class="dc-go" id="daily-card-go">Play</span>
     </div>
   </div>
 
@@ -4396,12 +4440,16 @@ function setFeedbackEl(id, msg, type) {
 // logo rule, an emoji on the share text, and (December) the holiday glove —
 // on the page, the browser tab and the home-screen icon.
 // Dates are MM-DD in the player's local time, inclusive; `to` may wrap past
-// New Year. `word` is the Daily Jab line shown on days whose word is pinned
+// New Year; the first matching row wins. `glove` + `icons` name the sprite
+// symbol and the icon-file suffix (favicon-32-<icons>.png, site-<icons>.webmanifest…).
+// `word` is the Daily Jab line shown on days whose word is pinned
 // on theme (DAILY_WORD_PINS). To add one: add a row here, and a
 // html[data-holiday="…"] rule in the CSS if it wants its own tint.
 const HOLIDAYS = [
-  { key: 'thanks',  from: '11-26', to: '11-26', tag: 'happy thanksgiving', share: '\u{1F983}', word: 'Happy Thanksgiving — today’s word belongs on the table.' },
-  { key: 'xmas',    from: '12-18', to: '12-26', tag: 'happy holidays',     share: '\u{1F384}', word: 'Happy holidays — today’s word is a festive one.', glove: 'g-glove-santa' },
+  { key: 'thanks',  from: '11-26', to: '11-26', tag: 'happy thanksgiving', share: '\u{1F983}', word: 'Happy Thanksgiving — today’s word belongs on the table.', glove: 'g-glove-turkey', icons: 'thanks' },
+  // The run-up: same turkey glove and tint, without wishing anyone a happy Thanksgiving a week early.
+  { key: 'thanks',  from: '11-15', to: '11-25', tag: 'turkey week &middot; jab &middot; win', share: '\u{1F983}', glove: 'g-glove-turkey', icons: 'thanks' },
+  { key: 'xmas',    from: '12-18', to: '12-26', tag: 'happy holidays',     share: '\u{1F384}', word: 'Happy holidays — today’s word is a festive one.', glove: 'g-glove-santa', icons: 'holiday' },
   { key: 'newyear', from: '12-31', to: '01-01', tag: 'happy new year',     share: '\u{1F389}', word: 'Last jab of the year — today’s word is a party.' },
 ];
 function currentHoliday() {
@@ -4412,8 +4460,9 @@ let _holidayApplied;
 function applyHoliday() {
   const h = currentHoliday();
   const key = h ? h.key : '';
-  if (key === _holidayApplied) return;
-  _holidayApplied = key;
+  const sig = h ? key + '|' + h.tag : '';
+  if (sig === _holidayApplied) return;
+  _holidayApplied = sig;
   if (key) document.documentElement.dataset.holiday = key; else delete document.documentElement.dataset.holiday;
   const sub = document.querySelector('.subtitle');
   if (sub) sub.innerHTML = h ? h.tag : 'guess &middot; jab &middot; win';
@@ -4422,14 +4471,14 @@ function applyHoliday() {
   // Tab + home-screen icons follow the holiday glove. Each link remembers its
   // normal href so the swap undoes itself when the dates pass. (Phones that
   // already have WordJab on the home screen keep whatever icon they saved.)
-  const seasonal = !!(h && h.glove);
+  const seasonal = !!(h && h.glove && h.icons);
   const sym = seasonal && document.getElementById(h.glove);
   const swaps = {
     'link[rel="icon"][href^="data:"]': sym ? 'data:image/svg+xml,' + encodeURIComponent(
       "<svg xmlns='http://www.w3.org/2000/svg' viewBox='-8 -7 80 80'><rect x='-8' y='-7' width='80' height='80' rx='16' fill='#150f22'/>" + sym.innerHTML + '</svg>') : null,
-    'link[rel="icon"][sizes="32x32"]': '/favicon-32-holiday.png',
-    'link[rel="apple-touch-icon"]': '/apple-touch-icon-holiday.png',
-    'link[rel="manifest"]': '/site-holiday.webmanifest',
+    'link[rel="icon"][sizes="32x32"]': seasonal && '/favicon-32-' + h.icons + '.png',
+    'link[rel="apple-touch-icon"]': seasonal && '/apple-touch-icon-' + h.icons + '.png',
+    'link[rel="manifest"]': seasonal && '/site-' + h.icons + '.webmanifest',
   };
   Object.keys(swaps).forEach(sel => {
     const el = document.querySelector(sel);
