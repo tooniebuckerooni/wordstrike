@@ -529,6 +529,13 @@
     box-shadow: 0 6px 28px rgba(255,182,39,0.12);
   }
   .daily-card .dc-icon .glove { width: 54px; height: 54px; display: block; }
+  .daily-card.done { padding: 0.7rem 1.25rem; border: 1px solid var(--line); background: var(--surface); box-shadow: none; gap: 0.75rem; }
+  .daily-card.done .dc-icon .glove { width: 30px; height: 30px; }
+  .daily-card.done .dc-kicker { display: none; }
+  .daily-card.done h3 { font-size: 1rem; }
+  .daily-card.done .dc-side { flex-direction: row; align-items: center; gap: 10px; }
+  .daily-card.done .dc-go { background: var(--surface-raised); color: var(--paper); font-size: 0.78rem; padding: 0.35rem 0.75rem; }
+  .next-fight { border-color: var(--jab); background: linear-gradient(135deg, var(--jab-tint), var(--surface) 60%); }
   .daily-card .dc-kicker { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--jab); margin-bottom: 3px; }
   .daily-card .dc-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
   .daily-card .dc-go { background: var(--jab); color: var(--ink); font-weight: 700; font-size: 0.85rem; padding: 0.45rem 0.9rem; border-radius: 999px; white-space: nowrap; }
@@ -1024,7 +1031,7 @@
   </div>
 
   <!-- 4. PLAY — the four ways to start a match -->
-  <div class="card">
+  <div class="card" id="play-card">
     <h2 class="home-h"><svg class="ico" aria-hidden="true"><use href="#i-users"/></svg>Start a match</h2>
     <div class="mode-grid">
       <button type="button" class="mode-tile" aria-label="Host live — get a 4-letter code to share" onclick="showScreen('screen-online-setup')">
@@ -1482,9 +1489,18 @@
       </div>
     </div>
   </div>
+  <!-- Hand-off: the Daily Jab is the warm-up, the match is the main event -->
+  <div class="card next-fight">
+    <h2 class="home-h" style="margin-bottom:0.2rem;">That was the warm-up</h2>
+    <p class="home-p">The real fight is a match: you hide a word too, and trade jabs until someone cracks.</p>
+    <div class="btn-row" style="margin-top:0;">
+      <button class="btn-primary" onclick="startBotGame()" style="flex:1;"><svg class="ico" aria-hidden="true"><use href="#i-bot"/></svg> Spar with JabBot</button>
+      <button class="btn-secondary" onclick="showScreen('screen-online-setup')" style="flex:1;"><svg class="ico" aria-hidden="true"><use href="#i-bolt"/></svg> Challenge a friend</button>
+    </div>
+  </div>
   <div class="btn-row">
     <button class="btn-secondary" id="daily-share-btn" onclick="shareDailyResult()" style="flex:1;">Share result</button>
-    <button class="btn-primary" onclick="showScreen('screen-home');renderDailyHomeBadge();" style="flex:1;">&larr; Back home</button>
+    <button class="btn-secondary" onclick="showScreen('screen-home');renderDailyHomeBadge();" style="flex:1;">&larr; Back home</button>
   </div>
 </div>
 
@@ -3882,7 +3898,7 @@ function renderLeaderboardHtml(record, stale) {
   const myName = id ? id.handle : '';
   const p = accountProfile;
   if (id && p) {
-    html += '<div class="lb-you"><b>' + esc(p.name) + '</b> · 🔥 ' + esc(p.streak) + ' current · ' + esc(p.best) + ' best · ' + esc(p.weekWins) + '/7 this week · ' + esc(p.wins || 0) + ' total wins</div>';
+    html += '<div class="lb-you"><b>' + esc(p.name) + '</b> · 🔥 ' + esc(p.streak) + ' current · ' + esc(p.best) + ' best · ' + esc(p.weekWins) + '/7 this week · ' + esc(p.wins || 0) + ' Daily Jabs cracked</div>';
   } else if (!id) {
     html += '<div class="lb-you"><a href="#" onclick="focusSignIn();return false;" style="color:var(--jab-soft);">Sign in</a> and every Daily Jab lands on this board automatically.</div>';
   }
@@ -3922,11 +3938,11 @@ function renderLeaderboardHtml(record, stale) {
   // ── Lifetime Daily Jab wins ──
   const total = lbSort(players.filter(e => winsOf(e) > 0), winsOf);
   const since = record.totalsSince ? ' <span style="text-transform:none;letter-spacing:0;">· since ' + esc(shortDayLabel(record.totalsSince)) + '</span>' : '';
-  html += lbSection('🏅', 'total wins' + since);
+  html += lbSection('🏅', 'daily jabs cracked' + since);
   if (total.length === 0) {
-    html += '<div class="lb-empty" style="padding:0.5rem 0;">Totals start counting with the next Daily Jab — win one to get on the board!</div>';
+    html += '<div class="lb-empty" style="padding:0.5rem 0;">Counting starts with the next Daily Jab — crack one to get on the board!</div>';
   } else {
-    html += lbRankedRows(total, myName, winsOf, e => esc(winsOf(e)) + (winsOf(e) === 1 ? ' win' : ' wins')).html;
+    html += lbRankedRows(total, myName, winsOf, e => esc(winsOf(e)) + ' cracked').html;
   }
 
   // Sponsored message between sections
@@ -4487,6 +4503,15 @@ function renderDailyHomeBadge() {
   const kickEl = document.getElementById('daily-card-kicker');
   const holiday = currentHoliday();
   const doneToday = getDailyState().lastPlayedDate === todayStr();
+  // Once today's word is played, the Daily Jab card folds down and steps
+  // below "Start a match", so the regular game leads for the rest of the day.
+  const dailyCard = document.querySelector('#screen-home .daily-card');
+  const playCard = document.getElementById('play-card');
+  const acctCard = document.getElementById('account-card');
+  if (dailyCard && playCard && acctCard && dailyCard.classList.contains('done') !== doneToday) {
+    dailyCard.classList.toggle('done', doneToday);
+    (doneToday ? playCard : acctCard).after(dailyCard);
+  }
   if (goEl) goEl.textContent = doneToday ? 'Result' : (loadDailyProgress(todayStr(), getDailyWord()) ? 'Resume' : 'Play');
   if (kickEl) kickEl.textContent = 'Daily #' + dailyDayNumber();
   const state = getDailyState();
