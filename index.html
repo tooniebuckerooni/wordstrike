@@ -4186,8 +4186,19 @@ function interleaveHard(order, hardPool, seed, everyN, extraHard = []) {
   let hardIdx = 0;
   order.forEach((w, i) => {
     out.push(w);
-    if ((i + 1) % everyN === 0) {
-      out.push(hardShuffled[hardIdx % hardShuffled.length]);
+    // Insert a hard word every `everyN` entries — but never the same one
+    // twice before every other hard word has had its turn. `order` has more
+    // insertion slots than hardShuffled has words (today: 136 slots, 98
+    // words), so once a lap uses up the whole shuffled pool, later slots in
+    // that same lap are just skipped (fewer hard days right before the
+    // cycle's own repeat, rather than reusing an earlier hard word within
+    // it — the bug this replaced: 28 hard words used to repeat 7–19 months
+    // apart instead of waiting out the ~2.2-year cycle like everything
+    // else). A fresh lap (a new call to interleaveHard, i.e. the next
+    // DAILY_EASE_FROM-style cutover) reshuffles and starts hardIdx at 0
+    // again, same as before.
+    if ((i + 1) % everyN === 0 && hardIdx < hardShuffled.length) {
+      out.push(hardShuffled[hardIdx]);
       hardIdx++;
     }
   });
