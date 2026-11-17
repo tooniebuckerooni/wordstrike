@@ -529,12 +529,6 @@
     box-shadow: 0 6px 28px rgba(255,182,39,0.12);
   }
   .daily-card .dc-icon .glove { width: 54px; height: 54px; display: block; }
-  .daily-card.done { padding: 0.7rem 1.25rem; border: 1px solid var(--line); background: var(--surface); box-shadow: none; gap: 0.75rem; }
-  .daily-card.done .dc-icon .glove { width: 30px; height: 30px; }
-  .daily-card.done .dc-kicker { display: none; }
-  .daily-card.done h3 { font-size: 1rem; }
-  .daily-card.done .dc-side { flex-direction: row; align-items: center; gap: 10px; }
-  .daily-card.done .dc-go { background: var(--surface-raised); color: var(--paper); font-size: 0.78rem; padding: 0.35rem 0.75rem; }
   .next-fight { border-color: var(--jab); background: linear-gradient(135deg, var(--jab-tint), var(--surface) 60%); }
   .daily-card .dc-kicker { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--jab); margin-bottom: 3px; }
   .daily-card .dc-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
@@ -4503,15 +4497,6 @@ function renderDailyHomeBadge() {
   const kickEl = document.getElementById('daily-card-kicker');
   const holiday = currentHoliday();
   const doneToday = getDailyState().lastPlayedDate === todayStr();
-  // Once today's word is played, the Daily Jab card folds down and steps
-  // below "Start a match", so the regular game leads for the rest of the day.
-  const dailyCard = document.querySelector('#screen-home .daily-card');
-  const playCard = document.getElementById('play-card');
-  const acctCard = document.getElementById('account-card');
-  if (dailyCard && playCard && acctCard && dailyCard.classList.contains('done') !== doneToday) {
-    dailyCard.classList.toggle('done', doneToday);
-    (doneToday ? playCard : acctCard).after(dailyCard);
-  }
   if (goEl) goEl.textContent = doneToday ? 'Result' : (loadDailyProgress(todayStr(), getDailyWord()) ? 'Resume' : 'Play');
   if (kickEl) kickEl.textContent = 'Daily #' + dailyDayNumber();
   const state = getDailyState();
