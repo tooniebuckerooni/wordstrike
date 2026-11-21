@@ -545,6 +545,7 @@
   .daily-result-title { font-family: 'Anton', sans-serif; text-transform: uppercase; font-size: 2.2rem; letter-spacing: 0.02em; margin-bottom: 0.4rem; }
   .daily-result-title.win { color: var(--jab); }
   .daily-result-title.lose { color: var(--hit); }
+  .daily-result-title.perfect { color: #4fd1ff; text-shadow: 0 0 16px rgba(79,209,255,0.45); }
   .streak-row { display: flex; justify-content: center; gap: 1.5rem; margin: 1rem 0; }
   .streak-box { text-align: center; }
   .streak-box .num { font-family: 'Anton', sans-serif; font-size: 1.8rem; color: var(--paper); }
@@ -3892,7 +3893,8 @@ function renderLeaderboardHtml(record, stale) {
   const myName = id ? id.handle : '';
   const p = accountProfile;
   if (id && p) {
-    html += '<div class="lb-you"><b>' + esc(p.name) + '</b> · 🔥 ' + esc(p.streak) + ' current · ' + esc(p.best) + ' best · ' + esc(p.weekWins) + '/7 this week · ' + esc(p.wins || 0) + ' Daily Jabs cracked</div>';
+    html += '<div class="lb-you"><b>' + esc(p.name) + '</b> · 🔥 ' + esc(p.streak) + ' current · ' + esc(p.best) + ' best · ' + esc(p.weekWins) + '/7 this week · ' + esc(p.wins || 0) + ' Daily Jabs cracked' +
+      (p.perfect ? ' · ' + esc(p.perfect) + ' flawless \u{1F48E}' : '') + '</div>';
   } else if (!id) {
     html += '<div class="lb-you"><a href="#" onclick="focusSignIn();return false;" style="color:var(--jab-soft);">Sign in</a> and every Daily Jab lands on this board automatically.</div>';
   }
@@ -4688,14 +4690,20 @@ function renderDailyStreakRow(state) {
 
 function showDailyResultScreen(won, word, roundsLeft, state) {
   showScreen('screen-daily-result');
-  document.getElementById('daily-result-emoji').textContent = won ? '\u{1F3C6}' : '\u{1F94A}';
+  // Flawless: cracked it without a single wrong jab. The hint never factors
+  // in here — it only ever offers on the last jab (useDailyHint requires
+  // dailyRoundsLeft === 1), which can't happen with all rounds still unspent.
+  const perfect = won && roundsLeft === DAILY_ROUNDS;
+  document.getElementById('daily-result-emoji').textContent = perfect ? '\u{1F48E}' : (won ? '\u{1F3C6}' : '\u{1F94A}');
   const titleEl = document.getElementById('daily-result-title');
-  titleEl.textContent = won ? 'Knockout!' : 'Down for the count';
-  titleEl.className = 'daily-result-title ' + (won ? 'win' : 'lose');
+  titleEl.textContent = perfect ? 'Flawless!' : (won ? 'Knockout!' : 'Down for the count');
+  titleEl.className = 'daily-result-title ' + (perfect ? 'perfect' : (won ? 'win' : 'lose'));
   const sundayTag = dailyIsHardSunday ? '💥 Hard Word Sunday — ' : '';
-  document.getElementById('daily-result-sub').textContent = sundayTag + (won
-    ? ('Cracked it with ' + roundsLeft + ' jab' + (roundsLeft===1?'':'s') + ' to spare.')
-    : ('Today’s word was ' + word.toUpperCase() + '.'));
+  document.getElementById('daily-result-sub').textContent = sundayTag + (perfect
+    ? 'Cracked it without a single wrong jab.'
+    : won
+      ? ('Cracked it with ' + roundsLeft + ' jab' + (roundsLeft===1?'':'s') + ' to spare.')
+      : ('Today’s word was ' + word.toUpperCase() + '.'));
 
   const tilesEl = document.getElementById('daily-result-tiles');
   tilesEl.innerHTML = '';
@@ -4707,7 +4715,7 @@ function showDailyResultScreen(won, word, roundsLeft, state) {
   });
 
   renderDailyStreakRow(state);
-  lastDailyShare = { won, word, roundsLeft, streak: liveLocalStreak(state), hint: !!state.lastHint };
+  lastDailyShare = { won, perfect, word, roundsLeft, streak: liveLocalStreak(state), hint: !!state.lastHint };
   renderDailySaveStatus();
 }
 
@@ -4790,13 +4798,13 @@ let lastDailyShare = null;
 
 function shareDailyResult() {
   if (!lastDailyShare) return;
-  const { won, word, roundsLeft, streak, hint } = lastDailyShare;
+  const { won, perfect, word, roundsLeft, streak, hint } = lastDailyShare;
   const greenSquares = won ? roundsLeft : 0;
   const redSquares = DAILY_ROUNDS - greenSquares;
   const squares = '\u{1F7E9}'.repeat(greenSquares) + '\u{1F7E5}'.repeat(redSquares);
   const holiday = currentHoliday();
   const text = 'WordJab Daily #' + dailyDayNumber() + (holiday ? ' ' + holiday.share : '') + '\n' +
-    (won ? 'Cracked it \u{1F3C6}' : 'Down for the count \u{1F94A}') + '\n' +
+    (perfect ? 'Flawless \u{1F48E}' : won ? 'Cracked it \u{1F3C6}' : 'Down for the count \u{1F94A}') + '\n' +
     squares + (hint ? ' \u{1F5E3}\uFE0F' : '') + '\n' +
     '\u{1F525} ' + streak + ' streak\n' +
     'wordjab.io';
