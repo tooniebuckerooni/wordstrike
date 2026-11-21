@@ -21,9 +21,12 @@
 //                            results per day, last 180 days (see bumpDayStat).
 //   id:<namelower>        -> { name, secret, secrets[], streak, best, lastDay,
 //                              lastResult, lastRoundsLeft, weekIndex, weekWins,
-//                              wins, played, recoverySalt, recoveryHash, createdTs }
-//                            wins/played are lifetime Daily Jab counters. They
-//                            start at 0 for everyone (no backfill from streaks).
+//                              wins, played, perfect, recoverySalt, recoveryHash, createdTs }
+//                            wins/played/perfect are lifetime Daily Jab
+//                            counters (perfect = wins with no wrong jab).
+//                            They start at 0 for everyone (no backfill from
+//                            streaks, and none for perfect from past wins —
+//                            roundsLeft wasn't tracked server-side before).
 //                            One record per claimed name — the source of truth
 //                            for that player's streak. `secret` / `secrets`
 //                            are the per-device tokens that prove ownership
@@ -632,6 +635,7 @@ function profile(rec, today) {
     weekWins: rec.weekIndex === week ? (rec.weekWins || 0) : 0,
     wins: rec.wins || 0,
     played: rec.played || 0,
+    perfect: rec.perfect || 0,
     hasPassword: !!rec.recoveryHash,
     today,
   };
@@ -975,6 +979,10 @@ export default {
           rec.lastDay = today;
           rec.lastResult = won ? 'win' : 'lose';
           rec.lastRoundsLeft = Math.max(0, Math.min(6, num(b.roundsLeft)));
+          // Flawless: cracked it with every round still unspent, i.e. not a
+          // single wrong jab. Derived here from roundsLeft rather than
+          // trusted from a client-sent flag — same reasoning as the streak.
+          if (won && rec.lastRoundsLeft === 6) rec.perfect = (rec.perfect || 0) + 1;
           await saveId(env, nl, rec);
           // Never let the tally get in the way of saving the result itself.
           try { await bumpDayStat(env, today, won); } catch (e) {}
